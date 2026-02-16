@@ -1,7 +1,8 @@
 [package]
 name = "master-browser"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+build = "build.rs"
 
 [dependencies]
 tauri = { version = "1.5", features = ["api-all"] }
@@ -11,8 +12,8 @@ anyhow = "1.0"
 tokio = { version = "1", features = ["full"] }
 log = "0.4"
 env_logger = "0.10"
-clap = { version = "4.4", features = ["derive"] }
 sysinfo = "0.29"
+clap = { version = "4.4", features = ["derive"] }
 
 [build-dependencies]
 tauri-build = "1.5"
