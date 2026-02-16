@@ -1,101 +1,56 @@
-# 🧭 Master Browser
+# Master Browser 🧭
 
-**The Universal Filesystem Bridge for Power Users.**
+A full-featured, high-performance file explorer and editor built with **Rust (Tauri)** and **Next.js**. Designed for the *Shadow Dark* aesthetic with smooth Framer Motion transitions and production-grade reliability.
 
-Master Browser is a production-grade, cross-platform application built with **Rust**, **Tauri**, and **Next.js**. It provides a high-performance, secure interface to browse, probe, and manage filesystems that are traditionally difficult to access across different operating systems.
+## Features 🚀
 
-> **Status:** Production Foundation Verified 🛡️ | UI: Shadow Dark 🎨
+- **Drive Dashboard:** Overview of all system drives with real-time usage metrics.
+- **Deep File Explorer:** Navigate directories with breadcrumb support and metadata viewing.
+- **In-App Editor:** Sleek, dark-themed code editor for on-the-fly modifications.
+- **Recent Files:** Persistent history of your recently edited files.
+- **Auto-Update Engine:** background update checks with native push notifications.
+- **Shadow Dark UI:** A minimalist, premium aesthetic built with Tailwind CSS and Framer Motion.
+- **Windows Optimized:** Specialized configuration to prevent terminal window flicker on launch.
 
----
+## Architecture 🏗️
 
-## 🚀 Key Features
+### Backend (Rust / Tauri)
+- `list_disks`: Aggregates system storage information using `sysinfo`.
+- `list_directory`: Recursive metadata extraction for file navigation.
+- `read_file_content` / `write_file_content`: Safe filesystem I/O.
+- `get_recent_files`: Local JSON-based persistence for user history.
+- `windows_subsystem`: GUI-only mode for Windows production builds.
 
-*   **Universal Probing**: Deep-scan block devices and disk images (VHDX, VHD) to identify internal partition layouts.
-*   **Multi-FS Support**: Built-in logic for **ext4**, **NTFS**, **exFAT**, and initial detection for **ReFS**.
-*   **Hybrid Interface**: 
-    *   💻 **CLI Utility**: Powerful terminal mode for automated disk listing and probing.
-    *   🎨 **Desktop GUI**: Sleek "Shadow Dark" animated dashboard built with Framer Motion.
-*   **User-Space Safety**: Minimal risk of system corruption by utilizing user-space parsing where possible.
-*   **CI/CD Pipeline**: Fully automated GitHub Actions for building `.exe`, `.dmg`, and `.AppImage`.
+### Frontend (Next.js / TypeScript)
+- **Framer Motion:** Orchestrates layout transitions between Dashboard, Explorer, and Editor.
+- **Lucide React:** Premium iconography set.
+- **Tauri APIs:** Direct integration with native notification and updater systems.
 
----
+## Development 💻
 
-## 🖼️ Gallery (UI/UX)
+### Prerequisites
+- [Rust](https://rustup.rs/) (latest stable)
+- [Node.js](https://nodejs.org/) (v18+)
+- Webkit2GTK (for Linux)
 
-*(Mockup placeholders for CI builds)*
-> **[Sleek Shadow Dark Dashboard]**  
-> *Glassmorphism design with real-time hardware status widgets.*
-
----
-
-## 🛠️ Technical Stack
-
-- **Backend**: Rust 🦀 (Tauri Framework)
-- **Frontend**: Next.js 15, Tailwind CSS, Framer Motion
-- **Discovery Engine**: `sysinfo` + `qemu-nbd` backend
-- **Build System**: GitHub Actions (Multi-platform Matrix)
-
----
-
-## 🚀 Getting Started
-
-### 1. Developer Environment
-Ensure you have the following installed:
-- [Rustup](https://rustup.rs/) (Stable)
-- [Node.js](https://nodejs.org/) (v20+)
-- [Tauri CLI](https://tauri.app/v1/guides/getting-started/prerequisites)
-
-### 2. Run the App
+### Setup
 ```bash
-# Clone the repository
-git clone https://github.com/CrimsonDevil333333/master-browser.git
-cd master-browser
-
 # Install dependencies
-cd frontend && npm install
-cd ../src-tauri && cargo fetch
+npm install
 
-# Start Development Mode (GUI)
-cd ..
+# Run in development mode
 npm run tauri dev
 ```
 
-### 3. Using the CLI Utility
-The core engine can be used directly from the terminal:
+### Build
 ```bash
-# List all connected disks
-cargo run -- cli ls
-
-# Probe a specific disk image (VHDX/VHD)
-cargo run -- cli probe /path/to/disk.vhdx
-
-# Mount a VHDX (Linux Only)
-cargo run -- cli mount /path/to/disk.vhdx /mnt/mount_point
+# Build production bundle
+npm run tauri build
 ```
 
----
+## Maintenance 🛠️
 
-## 🛡️ Supported Platforms & File Systems
-
-| Platform | Read | Write | Discovery |
-| :--- | :---: | :---: | :---: |
-| **Linux (Pi 5/PC)** | ✅ | ✅ | ✅ |
-| **Windows** | ✅ | ✅ | ✅ |
-| **macOS** | ✅ | ✅ | ✅ |
-
-| File System | Status | Note |
-| :--- | :--- | :--- |
-| **ext4** | ✅ Supported | Full Read/Write |
-| **NTFS** | ✅ Supported | Native via OS drivers |
-| **exFAT** | ✅ Supported | Universal |
-| **ReFS** | ⚠️ Experimental | Detection + Warning |
+The automated release workflow is configured in `Cargo.toml` and `package.json`. Updates are served via a seamless background engine.
 
 ---
-
-## 🤝 Contributing
-Push a tag `v*` to trigger the automated build pipeline and generate new release artifacts.
-
----
-
-## 📜 License
-MIT © CrimsonDevil333333
+*Built for the OpenClaw Swarm.*

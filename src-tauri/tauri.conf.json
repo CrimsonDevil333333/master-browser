@@ -11,8 +11,22 @@
     "version": "0.1.3"
   },
   "tauri": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://gist.githubusercontent.com/Clawdy/master-browser-update/raw/update.json"
+      ],
+      "dialog": false,
+      "pubkey": ""
+    },
     "allowlist": {
-      "all": true
+      "all": true,
+      "notification": {
+        "all": true
+      },
+      "updater": {
+        "all": true
+      }
     },
     "bundle": {
       "active": true,
