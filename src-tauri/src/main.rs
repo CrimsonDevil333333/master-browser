@@ -30,6 +30,11 @@ fn get_disks_internal() -> Vec<DiskInfo> {
     disks
 }
 
+#[tauri::command]
+fn list_disks() -> Vec<DiskInfo> {
+    get_disks_internal()
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 && args[1] == "cli" {
@@ -37,7 +42,10 @@ fn main() {
         return;
     }
 
-    println!("Master Browser: Please run with 'cli' argument for now.");
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![list_disks])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
 
 fn run_cli(args: &[String]) {
