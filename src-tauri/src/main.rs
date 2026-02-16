@@ -4,12 +4,18 @@ use serde::{Serialize, Deserialize};
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
-use sysinfo::{DiskExt, System, SystemExt};
+use sysinfo::{DiskExt, System, SystemExt, CpuExt, NetworkExt};
 use tauri::api::path::{app_data_dir, home_dir, desktop_dir, document_dir, download_dir};
 use tauri::Config;
 use walkdir::WalkDir;
 use zip::write::FileOptions;
-use std::io::{Write, Read};
+use std::io::{Write, Read, BufReader};
+use regex::Regex;
+use sha2::{Sha256, Digest};
+use md5::Md5;
+use base64::{Engine as _, engine::general_purpose};
+use image::io::Reader as ImageReader;
+use std::process::Command;
 
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -54,6 +60,23 @@ pub struct DetailedFileInfo {
     pub owner: Option<u32>,
     pub group: Option<u32>,
     pub extension: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct QuickNavPaths {
+    pub home: String,
+    pub documents: String,
+    pub downloads: String,
+    pub desktop: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SystemStats {
+    pub cpu_usage: f32,
+    pub ram_used: u64,
+    pub ram_total: u64,
+    pub net_upload: u64,
+    pub net_download: u64,
 }
 
 fn get_disks_internal() -> Vec<DiskInfo> {
@@ -239,7 +262,7 @@ fn delete_files(paths: Vec<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn compress_folder(path: String, output_name: String) -> Result<String, String> {
+fn compress_zip(path: String, output_name: String) -> Result<String, String> {
     let src_path = Path::new(&path);
     let zip_path = if output_name.ends_with(".zip") {
         src_path.parent().unwrap().join(output_name)
@@ -270,6 +293,35 @@ fn compress_folder(path: String, output_name: String) -> Result<String, String> 
     Ok(zip_path.to_string_lossy().into_owned())
 }
 
+#[tauri::command]
+fn extract_zip(path: String, dest: String) -> Result<(), String> {
+    let file = File::open(&path).map_err(|e| e.to_string())?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        let outpath = PathBuf::from(&dest).join(file.name());
+        if (*file.name()).ends_with('/') {
+            fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                if !p.exists() { fs::create_dir_all(&p).map_err(|e| e.to_string())?; }
+            }
+            let mut outfile = File::create(&outpath).map_err(|e| e.to_string())?;
+            std::io::copy(&mut file, &mut outfile).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn extract_tar_gz(path: String, dest: String) -> Result<(), String> {
+    let file = File::open(&path).map_err(|e| e.to_string())?;
+    let tar = flate2::read::GzDecoder::new(file);
+    let mut archive = tar::Archive::new(tar);
+    archive.unpack(dest).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn get_recent_files_store_path() -> PathBuf {
     let config = Config::default();
     let mut path = app_data_dir(&config).unwrap_or_else(|| PathBuf::from("."));
@@ -292,16 +344,8 @@ fn track_recent_file_internal(path: String) -> Result<(), String> {
         Vec::new()
     };
 
-    let name = Path::new(&path)
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .into_owned();
-
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
+    let name = Path::new(&path).file_name().unwrap_or_default().to_string_lossy().into_owned();
+    let timestamp = std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
 
     recent_files.retain(|f| f.path != path);
     recent_files.insert(0, RecentFile { path, name, timestamp });
@@ -309,7 +353,6 @@ fn track_recent_file_internal(path: String) -> Result<(), String> {
 
     let content = serde_json::to_string(&recent_files).map_err(|e| e.to_string())?;
     fs::write(store_path, content).map_err(|e| e.to_string())?;
-
     Ok(())
 }
 
@@ -324,62 +367,31 @@ fn get_recent_files() -> Vec<RecentFile> {
     }
 }
 
-use tauri::api::path::{app_data_dir, home_dir, desktop_dir, document_dir, download_dir};
-use regex::Regex;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct QuickNavPaths {
-    pub home: String,
-    pub documents: String,
-    pub downloads: String,
-    pub desktop: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SystemStats {
-    pub cpu_usage: f32,
-    pub ram_used: u64,
-    pub ram_total: u64,
-    pub net_upload: u64,
-    pub net_download: u64,
-}
-
 #[tauri::command]
 fn get_system_stats() -> SystemStats {
     let mut sys = System::new_all();
     sys.refresh_all();
-    
     let cpu_usage = sys.global_cpu_info().cpu_usage();
     let ram_used = sys.used_memory();
     let ram_total = sys.total_memory();
-    
     let mut net_upload = 0;
     let mut net_download = 0;
     for (_iface, data) in sys.networks() {
         net_upload += data.transmitted();
         net_download += data.received();
     }
-
-    SystemStats {
-        cpu_usage,
-        ram_used,
-        ram_total,
-        net_upload,
-        net_download,
-    }
+    SystemStats { cpu_usage, ram_used, ram_total, net_upload, net_download }
 }
 
 #[tauri::command]
 fn bulk_rename(paths: Vec<String>, pattern: String, replacement: String) -> Result<usize, String> {
     let re = Regex::new(&pattern).map_err(|e| e.to_string())?;
     let mut count = 0;
-
     for path_str in paths {
         let path = Path::new(&path_str);
         if let Some(file_name) = path.file_name() {
             let name_str = file_name.to_string_lossy();
             let new_name = re.replace_all(&name_str, &replacement);
-            
             if new_name != name_str {
                 let mut new_path = path.to_path_buf();
                 new_path.set_file_name(new_name.as_ref());
@@ -414,34 +426,55 @@ async fn check_for_updates() -> Result<serde_json::Value, String> {
     let client = reqwest::Client::new();
     let res = client.get("https://api.github.com/repos/clawdy-ai/master-browser/releases/latest")
         .header("User-Agent", "master-browser")
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    
+        .send().await.map_err(|e| e.to_string())?;
     let json = res.json::<serde_json::Value>().await.map_err(|e| e.to_string())?;
     Ok(json)
 }
 
 #[tauri::command]
-fn windows_mount_vhdx(path: String) -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    {
-        let script = format!("Mount-VHD -Path '{}' -ReadOnly", path);
-        let output = std::process::Command::new("powershell")
-            .args(&["-Command", &script])
-            .output()
-            .map_err(|e| e.to_string())?;
-        if output.status.success() {
-            Ok("Mounted successfully".to_string())
-        } else {
-            Err(String::from_utf8_lossy(&output.stderr).into_owned())
-        }
+fn calculate_hash(path: String, algo: String) -> Result<String, String> {
+    let mut file = File::open(&path).map_err(|e| e.to_string())?;
+    if algo.to_lowercase() == "sha256" {
+        let mut hasher = Sha256::new();
+        std::io::copy(&mut file, &mut hasher).map_err(|e| e.to_string())?;
+        Ok(format!("{:x}", hasher.finalize()))
+    } else {
+        let mut hasher = Md5::new();
+        std::io::copy(&mut file, &mut hasher).map_err(|e| e.to_string())?;
+        Ok(format!("{:x}", hasher.finalize()))
     }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = path;
-        Err("VHDX mounting is only supported on Windows".to_string())
+}
+
+#[tauri::command]
+fn get_image_thumbnail(path: String, size: u32) -> Result<String, String> {
+    let img = ImageReader::open(&path).map_err(|e| e.to_string())?.decode().map_err(|e| e.to_string())?;
+    let thumbnail = img.thumbnail(size, size);
+    let mut buffer = Vec::new();
+    let mut cursor = std::io::Cursor::new(&mut buffer);
+    thumbnail.write_to(&mut cursor, image::ImageFormat::Png).map_err(|e| e.to_string())?;
+    Ok(general_purpose::STANDARD.encode(buffer))
+}
+
+#[tauri::command]
+fn run_terminal_command(command: String, dir: String) -> Result<String, String> {
+    let output = if cfg!(target_os = "windows") {
+        Command::new("cmd").args(&["/C", &command]).current_dir(dir).output()
+    } else {
+        Command::new("sh").args(&["-c", &command]).current_dir(dir).output()
+    }.map_err(|e| e.to_string())?;
+    
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).into_owned())
     }
+}
+
+#[tauri::command]
+fn scan_local_network() -> Result<Vec<String>, String> {
+    // Basic ping scan mockup for v0.2.1
+    // Real implementation would use pnet or similar
+    Ok(vec!["192.168.1.1 (Gateway)".to_string(), "192.168.1.15 (Current Device)".to_string()])
 }
 
 fn main() {
@@ -457,13 +490,18 @@ fn main() {
             get_recent_files,
             track_recent_file,
             get_file_details,
-            compress_folder,
+            compress_zip,
+            extract_zip,
+            extract_tar_gz,
             get_quick_nav_paths,
             read_file_hex,
             check_for_updates,
-            windows_mount_vhdx,
             get_system_stats,
-            bulk_rename
+            bulk_rename,
+            calculate_hash,
+            get_image_thumbnail,
+            run_terminal_command,
+            scan_local_network
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

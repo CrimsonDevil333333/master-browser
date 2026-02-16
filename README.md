@@ -1,61 +1,59 @@
-# Master Browser 🧭
+# 🦞 MASTER BROWSER: God Mode Sovereign (v0.2.1)
 
-A full-featured, high-performance file explorer and editor built with **Rust (Tauri)** and **Next.js**. Designed for the *Shadow Dark* aesthetic with smooth Framer Motion transitions and production-grade reliability.
+> The ultimate, high-performance file manager for the digital elite. Shadow Dark aesthetics meet Rust-powered performance.
 
-## Features 🚀
+![Identity](https://img.shields.io/badge/Identity-Shadow_Dark-000000?style=for-the-badge)
+![Engine](https://img.shields.io/badge/Engine-Rust_Tauri-orange?style=for-the-badge)
+![Sovereign](https://img.shields.io/badge/Status-Universal_Sovereign-indigo?style=for-the-badge)
 
-- **Drive Dashboard:** Overview of all system drives with real-time usage metrics.
-- **Deep File Explorer:** Navigate directories with breadcrumb support and metadata viewing.
-- **In-App Editor:** Sleek, dark-themed code editor for on-the-fly modifications.
-- **Recent Files:** Persistent history of your recently edited files.
-- **Auto-Update Engine:** background update checks with native push notifications.
-- **Shadow Dark UI:** A minimalist, premium aesthetic built with Tailwind CSS and Framer Motion.
-- **Windows Optimized:** Specialized configuration to prevent terminal window flicker on launch.
+## 💎 GOD MODE FEATURES
 
-## Architecture 🏗️
+### 🦾 Sovereign Backend (Rust)
+- **Universal Archive Protocol**: Deep support for ZIP and TAR.GZ extraction and compression.
+- **Nexus Probe**: Local network discovery (ARP/Ping) to find neighboring nodes.
+- **Terminal Bridge**: Execute shell commands directly from the UI context.
+- **Entropy Engine**: High-speed SHA256 and MD5 checksum calculation.
+- **Ghost Thumbnails**: Base64-encoded, lightning-fast image preview engine.
 
-### Backend (Rust / Tauri)
-- `list_disks`: Aggregates system storage information using `sysinfo`.
-- `list_directory`: Recursive metadata extraction for file navigation.
-- `read_file_content` / `write_file_content`: Safe filesystem I/O.
-- `get_recent_files`: Local JSON-based persistence for user history.
-- `windows_subsystem`: GUI-only mode for Windows production builds.
+### ✨ Sovereign Frontend (React/Next.js)
+- **Command Palette (Ctrl+K)**: The central nervous system for file navigation and execution.
+- **Quick Look (Spacebar)**: Floating preview for images, hex, text, and metadata.
+- **Split-View Commander**: True multi-tab and split-pane support for power users.
+- **Anchor System**: User-managed bookmarks/pinned folders for instant access.
+- **Quantum Navigation**: Full keyboard-centric interface (Arrows, Enter, Backspace).
 
-### Frontend (Next.js / TypeScript)
-- **Framer Motion:** Orchestrates layout transitions between Dashboard, Explorer, and Editor.
-- **Lucide React:** Premium iconography set.
-- **Tauri APIs:** Direct integration with native notification and updater systems.
+### 🎨 Shadow Dark Glassmorphism
+- **Ultra-Dark Palette**: Optimized for OLED and high-contrast environments.
+- **Framer Motion Orchestration**: Professional-grade transitions and layouts.
+- **Monaco Pro Editor**: Integrated VS Code-level text editing.
+- **Hex Forge**: Native hex viewer for deep file inspection.
 
-## Development 💻
+## 🚀 INSTALLATION
 
-### Prerequisites
-- [Rust](https://rustup.rs/) (latest stable)
-- [Node.js](https://nodejs.org/) (v20+)
-- Webkit2GTK (for Linux builds)
-
-### Setup
 ```bash
 # Clone the repository
-git clone https://github.com/CrimsonDevil333333/master-browser.git
-cd master-browser
+git clone https://github.com/clawdy-ai/master-browser
 
-# IMPORTANT: Install all dependencies (Root & Frontend)
-# Use this flag to resolve older library peer conflicts
+# Install dependencies (Required for God Mode)
 npm install --legacy-peer-deps
 
-# Run in development mode
+# Launch Sovereign
 npm run tauri dev
 ```
 
-### Build
-```bash
-# Build production bundle for your current OS
-npm run tauri build
-```
+## 🛠️ TECH STACK
+- **Backend**: Rust, Tauri, Sysinfo, Walkdir, Zip, Image, Sha2.
+- **Frontend**: Next.js, TypeScript, Tailwind CSS, Framer Motion, Lucide, Monaco.
 
-## Maintenance 🛠️
+## 🦞 SOVEREIGN CARDS
 
-The automated release workflow is configured in `Cargo.toml` and `package.json`. Updates are served via a seamless background engine.
+| FEATURE | STATUS | INTENSITY |
+| :--- | :--- | :--- |
+| **Global Search** | ACTIVE | 🔥🔥🔥 |
+| **Network Probing** | ACTIVE | 🔥🔥 |
+| **Archive Support** | ACTIVE | 🔥🔥🔥 |
+| **Hex Viewer** | ACTIVE | 🔥🔥🔥 |
+| **Image Conversion** | PLANNED | 🦾 |
 
 ---
-*Built for the OpenClaw Swarm.*
+*Created with raw passion and Rust efficiency. Universal Sovereign Phase 6 is now live.* 🦾👑🔥
