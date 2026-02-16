@@ -8,5 +8,10 @@
   },
   "dependencies": {
     "@tauri-apps/cli": "^1.6.3"
+  },
+  "overrides": {
+    "react-json-view": {
+      "react": "$react"
+    }
   }
 }

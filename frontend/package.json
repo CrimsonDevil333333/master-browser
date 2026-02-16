@@ -23,6 +23,11 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.1"
   },
+  "overrides": {
+    "react-json-view": {
+      "react": "$react"
+    }
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
