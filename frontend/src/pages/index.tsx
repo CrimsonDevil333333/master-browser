@@ -473,8 +473,12 @@ export default function MasterBrowser() {
           <div className="h-full overflow-auto p-6">
              <ReactJson 
                src={JSON.parse(editingFile.content || '{}')} 
-               theme={theme === 'dark' ? 'monokai' : 'rgh'} 
-               onEdit={(e) => setEditingFile({ ...editingFile, content: JSON.stringify(e.updated_src) })}
+               theme={theme === 'dark' ? 'monokai' : 'rghost'} 
+               onEdit={(e) => {
+                 if (typeof e.updated_src === 'object') {
+                   setEditingFile({ ...editingFile, content: JSON.stringify(e.updated_src) });
+                 }
+               }}
                style={{ backgroundColor: 'transparent' }}
                displayDataTypes={false}
              />

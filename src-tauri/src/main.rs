@@ -5,7 +5,7 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use sysinfo::{DiskExt, System, SystemExt};
-use tauri::api::path::app_data_dir;
+use tauri::api::path::{app_data_dir, home_dir, desktop_dir, document_dir, download_dir};
 use tauri::Config;
 use walkdir::WalkDir;
 use zip::write::FileOptions;
@@ -324,6 +324,68 @@ fn get_recent_files() -> Vec<RecentFile> {
     }
 }
 
+use tauri::api::path::{app_data_dir, home_dir, desktop_dir, document_dir, download_dir};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct QuickNavPaths {
+    pub home: String,
+    pub documents: String,
+    pub downloads: String,
+    pub desktop: String,
+}
+
+#[tauri::command]
+fn get_quick_nav_paths() -> QuickNavPaths {
+    QuickNavPaths {
+        home: home_dir().unwrap_or_default().to_string_lossy().into_owned(),
+        documents: document_dir().unwrap_or_default().to_string_lossy().into_owned(),
+        downloads: download_dir().unwrap_or_default().to_string_lossy().into_owned(),
+        desktop: desktop_dir().unwrap_or_default().to_string_lossy().into_owned(),
+    }
+}
+
+#[tauri::command]
+fn read_file_hex(path: String, limit: usize) -> Result<String, String> {
+    let mut file = File::open(&path).map_err(|e| e.to_string())?;
+    let mut buffer = vec![0; limit];
+    let n = file.read(&mut buffer).map_err(|e| e.to_string())?;
+    Ok(hex::encode(&buffer[..n]))
+}
+
+#[tauri::command]
+async fn check_for_updates() -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let res = client.get("https://api.github.com/repos/clawdy-ai/master-browser/releases/latest")
+        .header("User-Agent", "master-browser")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let json = res.json::<serde_json::Value>().await.map_err(|e| e.to_string())?;
+    Ok(json)
+}
+
+#[tauri::command]
+fn windows_mount_vhdx(path: String) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let script = format!("Mount-VHD -Path '{}' -ReadOnly", path);
+        let output = std::process::Command::new("powershell")
+            .args(&["-Command", &script])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if output.status.success() {
+            Ok("Mounted successfully".to_string())
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).into_owned())
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("VHDX mounting is only supported on Windows".to_string())
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -337,7 +399,11 @@ fn main() {
             get_recent_files,
             track_recent_file,
             get_file_details,
-            compress_folder
+            compress_folder,
+            get_quick_nav_paths,
+            read_file_hex,
+            check_for_updates,
+            windows_mount_vhdx
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
