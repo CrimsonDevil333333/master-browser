@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -7,13 +7,21 @@ import {
   Clock, LayoutGrid, Search, MoreVertical,
   Download, AlertCircle, Copy, Move, Trash2,
   Image as ImageIcon, Video as VideoIcon,
-  Star, Home, Terminal
+  Star, Home, Terminal, Moon, Sun, List, 
+  Settings, Info, FileArchive, CheckSquare, 
+  Square, X, Filter, Code, Database, Table
 } from 'lucide-react';
-import { checkUpdate, installUpdate } from '@tauri-apps/api/updater';
-import { sendNotification, isPermissionGranted, requestPermission } from '@tauri-apps/api/notification';
-import { relaunch } from '@tauri-apps/api/process';
 import { Toaster, toast } from 'sonner';
 import { MediaViewer } from '../components/MediaViewer';
+import Editor from '@monaco-editor/react';
+import ReactJson from 'react-json-view';
+import Papa from 'papaparse';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 // --- Types ---
 
@@ -32,6 +40,21 @@ interface FileMetadata {
   is_dir: boolean;
   last_modified: number;
   path: string;
+  permissions: string;
+}
+
+interface DetailedFileInfo {
+  name: string;
+  path: string;
+  size: number;
+  is_dir: boolean;
+  created: number;
+  modified: number;
+  accessed: number;
+  permissions: string;
+  owner?: number;
+  group?: number;
+  extension?: string;
 }
 
 interface RecentFile {
@@ -40,41 +63,47 @@ interface RecentFile {
   timestamp: number;
 }
 
-type ViewMode = 'dashboard' | 'explorer' | 'editor' | 'recent';
+type ViewMode = 'dashboard' | 'explorer' | 'editor' | 'recent' | 'viewer';
+type ViewerType = 'json' | 'csv' | 'code' | 'image' | 'video';
 
 // --- Helpers ---
 
-const getFileType = (name: string): 'image' | 'video' | 'text' | 'other' => {
+const getFileType = (name: string): ViewerType | 'other' => {
   const ext = name.split('.').pop()?.toLowerCase();
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext || '')) return 'image';
   if (['mp4', 'mov', 'webm', 'mkv', 'avi'].includes(ext || '')) return 'video';
-  if (['txt', 'md', 'json', 'rs', 'js', 'ts', 'tsx', 'css', 'html', 'toml', 'yaml', 'yml'].includes(ext || '')) return 'text';
+  if (ext === 'json') return 'json';
+  if (ext === 'csv') return 'csv';
+  if (['txt', 'md', 'rs', 'js', 'ts', 'tsx', 'css', 'html', 'toml', 'yaml', 'yml', 'py', 'go', 'c', 'cpp', 'sh'].includes(ext || '')) return 'code';
   return 'other';
 };
 
 // --- Components ---
 
 export default function MasterBrowser() {
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [view, setView] = useState<ViewMode>('dashboard');
   const [disks, setDisks] = useState<Disk[]>([]);
   const [currentPath, setCurrentPath] = useState<string>('');
   const [files, setFiles] = useState<FileMetadata[]>([]);
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
-  const [editingFile, setEditingFile] = useState<{ path: string; content: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
-  const [updating, setUpdating] = useState<boolean>(false);
+  
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
+  const [detailedFile, setDetailedFile] = useState<DetailedFileInfo | null>(null);
+  
+  const [editingFile, setEditingFile] = useState<{ path: string; content: string; type: ViewerType | 'other' } | null>(null);
+  const [csvData, setCsvData] = useState<any[] | null>(null);
   
   const [mediaView, setMediaView] = useState<{ path: string; type: 'image' | 'video' } | null>(null);
-  const [clipboard, setClipboard] = useState<{ path: string; action: 'copy' | 'cut' } | null>(null);
 
   // --- Effects ---
 
   useEffect(() => {
     fetchDisks();
-    checkForUpdates();
-  }, []);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
 
   useEffect(() => {
     if (view === 'explorer' && currentPath) {
@@ -91,39 +120,6 @@ export default function MasterBrowser() {
   // --- Actions ---
 
   const isTauri = useMemo(() => typeof window !== 'undefined' && (window as any).__TAURI_IPC__, []);
-
-  const checkForUpdates = async () => {
-    if (!isTauri) return;
-    try {
-      const { shouldUpdate, manifest } = await checkUpdate();
-      if (shouldUpdate) {
-        setUpdateAvailable(true);
-        let permission = await isPermissionGranted();
-        if (!permission) {
-          permission = await requestPermission() === 'granted';
-        }
-        if (permission) {
-          sendNotification({
-            title: 'Update Available',
-            body: `Master Browser ${manifest?.version} is ready to install.`,
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Update check failed:', error);
-    }
-  };
-
-  const runUpdate = async () => {
-    setUpdating(true);
-    try {
-      await installUpdate();
-      await relaunch();
-    } catch (error) {
-      toast.error('Update installation failed');
-      setUpdating(false);
-    }
-  };
 
   const fetchDisks = async () => {
     setLoading(true);
@@ -147,10 +143,12 @@ export default function MasterBrowser() {
 
   const fetchDirectory = async (path: string) => {
     setLoading(true);
+    setSelectedPaths([]);
     if (!isTauri) {
         setFiles([
-            { name: 'Documents', path: path + '/Documents', is_dir: true, size: 0, last_modified: Math.floor(Date.now()/1000) },
-            { name: 'config.json', path: path + '/config.json', is_dir: false, size: 1024, last_modified: Math.floor(Date.now()/1000) },
+            { name: 'Documents', path: path + '/Documents', is_dir: true, size: 0, last_modified: Math.floor(Date.now()/1000), permissions: 'rwxr-xr-x' },
+            { name: 'data.json', path: path + '/data.json', is_dir: false, size: 1024, last_modified: Math.floor(Date.now()/1000), permissions: 'rw-r--r--' },
+            { name: 'report.csv', path: path + '/report.csv', is_dir: false, size: 2048, last_modified: Math.floor(Date.now()/1000), permissions: 'rw-r--r--' },
         ]);
         setLoading(false);
         return;
@@ -187,15 +185,15 @@ export default function MasterBrowser() {
       return;
     }
 
-    if (!isTauri) {
-        setEditingFile({ path: file.path, content: "// Browser mode mock content\nconsole.log('Hello World');" });
-        setView('editor');
-        return;
-    }
-
     try {
-      const content = await invoke<string>('read_file_content', { path: file.path });
-      setEditingFile({ path: file.path, content });
+      const content = isTauri ? await invoke<string>('read_file_content', { path: file.path }) : '{"demo": true}';
+      
+      if (type === 'csv') {
+        const parsed = Papa.parse(content, { header: true });
+        setCsvData(parsed.data);
+      }
+      
+      setEditingFile({ path: file.path, content, type });
       setView('editor');
     } catch (err) {
       toast.error('Failed to read file');
@@ -204,6 +202,16 @@ export default function MasterBrowser() {
 
   const saveFile = async () => {
     if (!editingFile || !isTauri) return;
+    
+    if (editingFile.type === 'json') {
+      try {
+        JSON.parse(editingFile.content);
+      } catch (e) {
+        toast.error('Invalid JSON structure');
+        return;
+      }
+    }
+
     try {
       await invoke('write_file_content', { path: editingFile.path, content: editingFile.content });
       toast.success('File saved successfully');
@@ -212,52 +220,42 @@ export default function MasterBrowser() {
     }
   };
 
-  const copyFile = (path: string) => {
-    setClipboard({ path, action: 'copy' });
-    toast.success('File path copied to clipboard');
-  };
-
-  const cutFile = (path: string) => {
-    setClipboard({ path, action: 'cut' });
-    toast.success('File marked for moving');
-  };
-
-  const pasteFile = async () => {
-    if (!clipboard || !isTauri) return;
-    const fileName = clipboard.path.split(/[/\\]/).pop();
-    const dest = `${currentPath}/${fileName}`;
-
+  const deleteSelected = async () => {
+    if (selectedPaths.length === 0 || !isTauri) return;
+    if (!confirm(`Delete ${selectedPaths.length} items?`)) return;
     try {
-      if (clipboard.action === 'copy') {
-        await invoke('copy_file', { src: clipboard.path, dest });
-        toast.success('File copied successfully');
-      } else {
-        await invoke('move_file', { src: clipboard.path, dest });
-        toast.success('File moved successfully');
-        setClipboard(null);
-      }
+      await invoke('delete_files', { paths: selectedPaths });
+      toast.success('Deleted items');
       fetchDirectory(currentPath);
     } catch (err) {
-      toast.error('Paste operation failed');
+      toast.error('Delete failed');
     }
   };
 
-  const deleteFile = async (path: string) => {
+  const compressFolder = async (path: string) => {
     if (!isTauri) return;
-    if (!confirm('Are you sure you want to delete this?')) return;
-    
+    const name = path.split(/[/\\]/).pop() || 'archive';
+    toast.promise(invoke('compress_folder', { path, outputName: name }), {
+      loading: 'Compressing...',
+      success: (p) => `Archive created: ${p}`,
+      error: 'Compression failed'
+    });
+  };
+
+  const showDetails = async (path: string) => {
+    if (!isTauri) return;
     try {
-      await invoke('delete_file', { path });
-      toast.success('Deleted successfully');
-      fetchDirectory(currentPath);
+      const details = await invoke<DetailedFileInfo>('get_file_details', { path });
+      setDetailedFile(details);
     } catch (err) {
-      toast.error('Deletion failed');
+      toast.error('Failed to get file details');
     }
   };
 
-  const navigateToDisk = (disk: Disk) => {
-    setCurrentPath(disk.mount_point);
-    setView('explorer');
+  const toggleSelect = (path: string) => {
+    setSelectedPaths(prev => 
+      prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
+    );
   };
 
   const navigateUp = () => {
@@ -270,10 +268,6 @@ export default function MasterBrowser() {
 
   // --- Helpers ---
 
-  const filteredFiles = useMemo(() => {
-    return files.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [files, searchQuery]);
-
   const formatSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -281,6 +275,10 @@ export default function MasterBrowser() {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
+
+  const filteredFiles = useMemo(() => {
+    return files.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [files, searchQuery]);
 
   // --- Render Sections ---
 
@@ -292,20 +290,20 @@ export default function MasterBrowser() {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: idx * 0.05 }}
-          whileHover={{ y: -5, borderColor: 'rgba(99, 102, 241, 0.4)', boxShadow: '0 0 20px rgba(99, 102, 241, 0.1)' }}
-          onClick={() => navigateToDisk(disk)}
-          className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800/50 backdrop-blur-xl flex flex-col gap-4 group cursor-pointer transition-all"
+          whileHover={{ y: -5 }}
+          onClick={() => { setCurrentPath(disk.mount_point); setView('explorer'); }}
+          className="p-6 rounded-2xl bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800/50 shadow-sm dark:backdrop-blur-xl flex flex-col gap-4 group cursor-pointer"
         >
           <div className="flex items-start justify-between">
-            <div className="p-3 bg-zinc-800 rounded-xl group-hover:bg-indigo-900/20 transition-colors">
-              <HardDrive className="w-6 h-6 text-indigo-400 group-hover:text-indigo-300" />
+            <div className="p-3 bg-zinc-100 dark:bg-zinc-800 rounded-xl group-hover:bg-indigo-500/10 transition-colors">
+              <HardDrive className="w-6 h-6 text-zinc-600 dark:text-indigo-400 group-hover:text-indigo-500" />
             </div>
             {disk.is_removable && (
-              <span className="text-[10px] font-bold uppercase tracking-widest bg-indigo-500/10 text-indigo-400 px-2 py-1 rounded">Removable</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest bg-indigo-500/10 text-indigo-500 px-2 py-1 rounded">Removable</span>
             )}
           </div>
           <div>
-            <h3 className="font-bold text-lg group-hover:text-white transition-colors">{disk.name || 'Local Drive'}</h3>
+            <h3 className="font-bold text-lg dark:group-hover:text-white transition-colors">{disk.name || 'Local Drive'}</h3>
             <p className="text-zinc-500 text-xs font-mono truncate">{disk.mount_point}</p>
           </div>
           <div className="mt-2">
@@ -313,11 +311,11 @@ export default function MasterBrowser() {
               <span>{Math.round((disk.total_space - disk.available_space) / 1024 / 1024 / 1024)}GB USED</span>
               <span>{Math.round(disk.total_space / 1024 / 1024 / 1024)}GB TOTAL</span>
             </div>
-            <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+            <div className="h-1.5 w-full bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
               <motion.div 
                 initial={{ width: 0 }}
                 animate={{ width: `${((disk.total_space - disk.available_space) / disk.total_space) * 100}%` }}
-                className="h-full bg-indigo-500 group-hover:bg-indigo-400 shadow-[0_0_10px_rgba(99,102,241,0.5)] transition-all" 
+                className="h-full bg-indigo-500" 
               />
             </div>
           </div>
@@ -328,170 +326,198 @@ export default function MasterBrowser() {
 
   const renderExplorer = () => (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-4 bg-zinc-900/50 p-2 rounded-xl border border-zinc-800 backdrop-blur-md">
-        <button onClick={navigateUp} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white">
+      {/* Explorer Header */}
+      <div className="flex items-center gap-4 bg-white/80 dark:bg-zinc-900/50 p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 backdrop-blur-md sticky top-0 z-10">
+        <button onClick={navigateUp} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors text-zinc-500 hover:text-indigo-500">
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <div className="flex-1 overflow-hidden">
-           <div className="flex items-center gap-1 text-xs font-mono text-zinc-400 truncate">
+        <div className="flex-1 overflow-hidden flex items-center gap-2">
+           <div className="flex items-center gap-1 text-xs font-mono text-zinc-500 truncate">
              {currentPath.split(/[/\\]/).map((part, i, arr) => (
                <span key={i} className="flex items-center gap-1">
                  <span 
-                    className={`cursor-pointer hover:text-indigo-400 transition-colors ${i === arr.length - 1 ? "text-zinc-100 font-bold" : ""}`}
+                    className={cn("cursor-pointer hover:text-indigo-500 transition-colors", i === arr.length - 1 && "text-zinc-900 dark:text-zinc-100 font-bold")}
                     onClick={() => setCurrentPath('/' + arr.slice(0, i + 1).join('/'))}
                  >
                    {part || '/'}
                  </span>
-                 {i < arr.length - 1 && <ChevronRight className="w-3 h-3 text-zinc-700" />}
+                 {i < arr.length - 1 && <ChevronRight className="w-3 h-3 text-zinc-300 dark:text-zinc-700" />}
                </span>
              ))}
            </div>
         </div>
-        <div className="flex items-center gap-2 px-3 border-l border-zinc-800">
-          <Search className="w-4 h-4 text-zinc-600" />
-          <input 
-            type="text" 
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-transparent border-none text-xs focus:ring-0 w-32 outline-none text-zinc-300"
-          />
+        
+        <div className="flex items-center gap-3 px-3 border-l border-zinc-200 dark:border-zinc-800">
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+            <input 
+              type="text" 
+              placeholder="Filter files..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-zinc-100 dark:bg-zinc-800/50 border-none text-xs rounded-xl pl-9 pr-4 py-2 outline-none w-48 focus:ring-1 focus:ring-indigo-500/50"
+            />
+          </div>
+          
+          {selectedPaths.length > 0 && (
+            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-2">
+              <button onClick={deleteSelected} className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all" title="Delete Selected">
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <div className="h-4 w-px bg-zinc-800 mx-1" />
+              <span className="text-[10px] font-bold text-zinc-500">{selectedPaths.length} SELECTED</span>
+            </motion.div>
+          )}
         </div>
-        {clipboard && (
-          <button 
-            onClick={pasteFile}
-            className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all"
-          >
-            Paste
-          </button>
-        )}
       </div>
 
-      <div className="rounded-2xl border border-zinc-800/50 bg-zinc-900/20 overflow-hidden backdrop-blur-sm">
-        <table className="w-full text-left text-sm border-collapse">
-          <thead>
-            <tr className="border-b border-zinc-800/50 text-zinc-500 text-[10px] uppercase tracking-widest font-bold">
-              <th className="px-6 py-4 font-bold">Name</th>
-              <th className="px-6 py-4 font-bold">Size</th>
-              <th className="px-6 py-4 font-bold">Modified</th>
-              <th className="px-6 py-4"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredFiles.map((file) => {
-              const type = getFileType(file.name);
-              return (
-                <tr 
-                  key={file.path} 
-                  onClick={() => file.is_dir ? setCurrentPath(file.path) : openFile(file)}
-                  className="group hover:bg-zinc-800/40 cursor-pointer transition-colors border-b border-zinc-800/10 last:border-0"
-                >
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      {file.is_dir ? (
-                        <Folder className="w-4 h-4 text-indigo-400" />
-                      ) : type === 'image' ? (
-                        <ImageIcon className="w-4 h-4 text-emerald-400" />
-                      ) : type === 'video' ? (
-                        <VideoIcon className="w-4 h-4 text-amber-400" />
-                      ) : (
-                        <FileIcon className="w-4 h-4 text-zinc-400" />
-                      )}
-                      <span className="font-medium truncate max-w-[300px] group-hover:text-white transition-colors">{file.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 font-mono text-xs text-zinc-500 group-hover:text-zinc-400">
-                    {file.is_dir ? '--' : formatSize(file.size)}
-                  </td>
-                  <td className="px-6 py-4 text-xs text-zinc-500 group-hover:text-zinc-400">
-                    {new Date(file.last_modified * 1000).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); copyFile(file.path); }} className="p-1.5 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-500 hover:text-white" title="Copy">
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); cutFile(file.path); }} className="p-1.5 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-500 hover:text-white" title="Move">
-                        <Move className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); deleteFile(file.path); }} className="p-1.5 hover:bg-red-900/30 rounded-lg transition-colors text-zinc-500 hover:text-red-400" title="Delete">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {filteredFiles.length === 0 && (
-          <div className="py-20 text-center text-zinc-600">
-            <Folder className="w-12 h-12 mx-auto mb-4 opacity-20" />
-            <p>No files found</p>
-          </div>
-        )}
+      <div className="grid grid-cols-1 gap-1">
+        {filteredFiles.map((file) => {
+          const isSelected = selectedPaths.includes(file.path);
+          const type = getFileType(file.name);
+          return (
+            <motion.div
+              layout
+              key={file.path}
+              className={cn(
+                "group flex items-center gap-4 px-6 py-3 rounded-2xl transition-all cursor-pointer border border-transparent",
+                isSelected ? "bg-indigo-500/5 border-indigo-500/20" : "hover:bg-zinc-100 dark:hover:bg-zinc-900/40"
+              )}
+              onClick={(e) => {
+                if (e.ctrlKey || e.metaKey) toggleSelect(file.path);
+                else file.is_dir ? setCurrentPath(file.path) : openFile(file);
+              }}
+            >
+              <div 
+                onClick={(e) => { e.stopPropagation(); toggleSelect(file.path); }}
+                className={cn(
+                  "w-5 h-5 rounded-md border flex items-center justify-center transition-all",
+                  isSelected ? "bg-indigo-500 border-indigo-500 text-white" : "border-zinc-300 dark:border-zinc-700 opacity-0 group-hover:opacity-100"
+                )}
+              >
+                {isSelected && <CheckSquare className="w-3.5 h-3.5" />}
+              </div>
+
+              <div className="flex-1 flex items-center gap-4 min-w-0">
+                <div className={cn(
+                  "p-2.5 rounded-xl transition-colors",
+                  file.is_dir ? "bg-indigo-500/10 text-indigo-500" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                )}>
+                  {file.is_dir ? <Folder className="w-5 h-5" /> : 
+                   type === 'image' ? <ImageIcon className="w-5 h-5 text-emerald-500" /> :
+                   type === 'video' ? <VideoIcon className="w-5 h-5 text-amber-500" /> :
+                   type === 'json' ? <Database className="w-5 h-5 text-purple-500" /> :
+                   type === 'csv' ? <Table className="w-5 h-5 text-blue-500" /> :
+                   <FileIcon className="w-5 h-5" />}
+                </div>
+                
+                <div className="flex flex-col min-w-0">
+                  <span className="font-semibold text-sm truncate dark:text-zinc-200 group-hover:text-indigo-500 transition-colors">
+                    {file.name}
+                  </span>
+                  <div className="flex items-center gap-3 text-[10px] font-mono text-zinc-500">
+                    <span>{file.is_dir ? 'Folder' : formatSize(file.size)}</span>
+                    <span>•</span>
+                    <span>{file.permissions}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                {file.is_dir && (
+                  <button onClick={(e) => { e.stopPropagation(); compressFolder(file.path); }} className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg text-zinc-500" title="Zip">
+                    <FileArchive className="w-4 h-4" />
+                  </button>
+                )}
+                <button onClick={(e) => { e.stopPropagation(); showDetails(file.path); }} className="p-2 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-lg text-zinc-500" title="Info">
+                  <Info className="w-4 h-4" />
+                </button>
+              </div>
+            </motion.div>
+          );
+        })}
       </div>
     </div>
   );
 
   const renderEditor = () => (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="flex flex-col h-[70vh] rounded-2xl border border-zinc-800 bg-[#0d0d0d] overflow-hidden shadow-2xl shadow-black/50"
-    >
-      <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/30 backdrop-blur-md">
-        <div className="flex items-center gap-4">
-           <button onClick={() => setView('explorer')} className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors">
+    <div className="flex flex-col h-[calc(100vh-160px)] gap-4">
+      <div className="flex items-center justify-between p-2 bg-white dark:bg-zinc-900/50 rounded-2xl border border-zinc-200 dark:border-zinc-800">
+        <div className="flex items-center gap-3 pl-2">
+           <button onClick={() => setView('explorer')} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-500 transition-colors">
              <ArrowLeft className="w-4 h-4" />
            </button>
            <div className="flex flex-col">
-             <span className="text-xs font-bold text-zinc-100">{editingFile?.path.split(/[/\\]/).pop()}</span>
-             <span className="text-[10px] font-mono text-zinc-500 truncate max-w-[400px]">{editingFile?.path}</span>
+             <span className="text-xs font-bold dark:text-zinc-200">{editingFile?.path.split(/[/\\]/).pop()}</span>
+             <span className="text-[10px] font-mono text-zinc-500">{editingFile?.type?.toUpperCase()}</span>
            </div>
         </div>
-        <button 
-          onClick={saveFile}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
-        >
-          <Save className="w-3.5 h-3.5" /> Save
-        </button>
+        <div className="flex items-center gap-2 pr-2">
+          {editingFile?.type === 'json' && (
+             <button onClick={() => {
+                try {
+                  const obj = JSON.parse(editingFile.content);
+                  setEditingFile({ ...editingFile, content: JSON.stringify(obj, null, 2) });
+                  toast.success('JSON Formatted');
+                } catch(e) { toast.error('Invalid JSON'); }
+             }} className="px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-[10px] font-bold text-zinc-500 uppercase">Format</button>
+          )}
+          <button onClick={saveFile} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-indigo-500/20">
+            <Save className="w-3.5 h-3.5" /> Save Changes
+          </button>
+        </div>
       </div>
-      <textarea
-        value={editingFile?.content}
-        onChange={(e) => setEditingFile(prev => prev ? { ...prev, content: e.target.value } : null)}
-        className="flex-1 bg-transparent p-6 font-mono text-sm resize-none focus:ring-0 outline-none text-zinc-300 leading-relaxed selection:bg-indigo-500/30"
-        spellCheck={false}
-      />
-    </motion.div>
-  );
 
-  const renderRecent = () => (
-    <div className="flex flex-col gap-4">
-      <h2 className="text-lg font-bold flex items-center gap-2 text-zinc-400">
-        <Clock className="w-5 h-5 text-indigo-400" /> Recent Files
-      </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {recentFiles.map((file) => (
-          <div 
-            key={file.path}
-            onClick={() => openFile(file)}
-            className="p-4 rounded-xl bg-zinc-900/40 border border-zinc-800 hover:border-indigo-500/50 cursor-pointer group transition-all hover:bg-zinc-800/40"
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-zinc-800 rounded-lg group-hover:bg-indigo-900/20 transition-colors">
-                <FileIcon className="w-4 h-4 text-indigo-400" />
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <p className="font-bold text-sm truncate group-hover:text-white transition-colors">{file.name}</p>
-                <p className="text-[10px] text-zinc-500 font-mono truncate">{file.path}</p>
-              </div>
-              <span className="text-[10px] text-zinc-600 font-mono whitespace-nowrap">
-                {new Date(file.timestamp * 1000).toLocaleDateString()}
-              </span>
-            </div>
+      <div className="flex-1 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden bg-zinc-50 dark:bg-[#0d0d0d]">
+        {editingFile?.type === 'json' ? (
+          <div className="h-full overflow-auto p-6">
+             <ReactJson 
+               src={JSON.parse(editingFile.content || '{}')} 
+               theme={theme === 'dark' ? 'monokai' : 'rgh'} 
+               onEdit={(e) => setEditingFile({ ...editingFile, content: JSON.stringify(e.updated_src) })}
+               style={{ backgroundColor: 'transparent' }}
+               displayDataTypes={false}
+             />
           </div>
-        ))}
+        ) : editingFile?.type === 'csv' && csvData ? (
+          <div className="h-full overflow-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="sticky top-0 bg-zinc-100 dark:bg-zinc-800 z-10">
+                <tr>
+                  {Object.keys(csvData[0] || {}).map(key => (
+                    <th key={key} className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 font-bold uppercase tracking-wider">{key}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {csvData.map((row, i) => (
+                  <tr key={i} className="hover:bg-zinc-100 dark:hover:bg-zinc-900/50">
+                    {Object.values(row).map((val: any, j) => (
+                      <td key={j} className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 text-zinc-500 font-mono">{val}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <Editor
+            height="100%"
+            theme={theme === 'dark' ? 'vs-dark' : 'light'}
+            defaultLanguage={editingFile?.type === 'code' ? undefined : 'text'}
+            path={editingFile?.path}
+            value={editingFile?.content}
+            onChange={(val) => setEditingFile(prev => prev ? { ...prev, content: val || '' } : null)}
+            options={{
+              minimap: { enabled: false },
+              fontSize: 13,
+              fontFamily: 'JetBrains Mono, monospace',
+              padding: { top: 20 },
+              smoothScrolling: true,
+              cursorSmoothCaretAnimation: "on" as const
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -499,137 +525,149 @@ export default function MasterBrowser() {
   // --- Main Layout ---
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-100 flex selection:bg-indigo-500/30">
-      <Toaster position="top-right" theme="dark" />
+    <div className={cn(
+      "min-h-screen transition-colors duration-300",
+      theme === 'dark' ? "bg-[#0a0a0a] text-zinc-100" : "bg-zinc-50 text-zinc-900"
+    )}>
+      <Toaster position="top-right" theme={theme} />
       
       <AnimatePresence>
-        {mediaView && (
-          <MediaViewer 
-            path={mediaView.path} 
-            type={mediaView.type} 
-            onClose={() => setMediaView(null)} 
-          />
+        {mediaView && <MediaViewer path={mediaView.path} type={mediaView.type} onClose={() => setMediaView(null)} />}
+        {detailedFile && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+             <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-zinc-200 dark:border-zinc-800 shadow-2xl">
+                <div className="flex justify-between items-start mb-6">
+                  <h2 className="text-xl font-bold">Properties</h2>
+                  <button onClick={() => setDetailedFile(null)} className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"><X className="w-5 h-5" /></button>
+                </div>
+                <div className="space-y-4">
+                  {[
+                    { label: 'Name', value: detailedFile.name },
+                    { label: 'Location', value: detailedFile.path, mono: true },
+                    { label: 'Size', value: formatSize(detailedFile.size) },
+                    { label: 'Type', value: detailedFile.is_dir ? 'Folder' : 'File' },
+                    { label: 'Created', value: new Date(detailedFile.created * 1000).toLocaleString() },
+                    { label: 'Modified', value: new Date(detailedFile.modified * 1000).toLocaleString() },
+                    { label: 'Permissions', value: detailedFile.permissions, mono: true },
+                  ].map(item => (
+                    <div key={item.label} className="flex flex-col gap-1">
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{item.label}</span>
+                      <span className={cn("text-sm", item.mono && "font-mono text-xs text-zinc-500 break-all")}>{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+             </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Sidebar Navigation */}
-      <aside className="w-64 border-r border-zinc-800/50 bg-[#0d0d0d] flex flex-col p-6 gap-8 shrink-0">
-        <motion.div 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-3 cursor-pointer group"
-          onClick={() => setView('dashboard')}
-        >
-          <div className="p-2 bg-indigo-600 rounded-lg shadow-lg shadow-indigo-500/20 group-hover:shadow-indigo-500/40 transition-all">
-            <Shield className="w-6 h-6 text-white" />
+      <div className="flex h-screen overflow-hidden">
+        {/* Sidebar */}
+        <aside className="w-72 border-r border-zinc-200 dark:border-zinc-800/50 bg-white dark:bg-[#0d0d0d] flex flex-col p-8 gap-10 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-600 rounded-2xl shadow-xl shadow-indigo-600/20">
+              <Shield className="w-6 h-6 text-white" />
+            </div>
+            <h1 className="text-xl font-black tracking-tight">Master</h1>
           </div>
-          <h1 className="text-xl font-bold tracking-tight">Master Browser</h1>
-        </motion.div>
 
-        <nav className="flex flex-col gap-1">
-          <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest px-3 mb-2">Main Menu</p>
-          <button 
-            onClick={() => setView('dashboard')}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${view === 'dashboard' ? 'bg-indigo-500/10 text-indigo-400' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}
-          >
-            <Home className="w-4 h-4" /> Dashboard
-          </button>
-          <button 
-            onClick={() => setView('explorer')}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${view === 'explorer' ? 'bg-indigo-500/10 text-indigo-400' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}
-          >
-            <LayoutGrid className="w-4 h-4" /> Explorer
-          </button>
-          <button 
-            onClick={() => setView('recent')}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${view === 'recent' ? 'bg-indigo-500/10 text-indigo-400' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'}`}
-          >
-            <Clock className="w-4 h-4" /> Recent
-          </button>
-        </nav>
+          <nav className="flex flex-col gap-1.5">
+            <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-[0.2em] px-4 mb-3">Navigation</p>
+            {[
+              { id: 'dashboard', icon: Home, label: 'Dashboard' },
+              { id: 'explorer', icon: LayoutGrid, label: 'Explorer' },
+              { id: 'recent', icon: Clock, label: 'Recent' }
+            ].map(item => (
+              <button 
+                key={item.id}
+                onClick={() => setView(item.id as ViewMode)}
+                className={cn(
+                  "flex items-center gap-4 px-4 py-3.5 rounded-2xl text-sm font-bold transition-all",
+                  view === item.id ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/30" : "text-zinc-500 hover:text-indigo-500 hover:bg-indigo-500/5"
+                )}
+              >
+                <item.icon className="w-5 h-5" /> {item.label}
+              </button>
+            ))}
+          </nav>
 
-        <nav className="flex flex-col gap-1">
-          <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest px-3 mb-2">Quick Nav</p>
-          <button 
-            onClick={() => { setCurrentPath('/home/pi/Desktop'); setView('explorer'); }}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all"
-          >
-            <Star className="w-4 h-4 text-amber-500/50" /> Desktop
-          </button>
-          <button 
-            onClick={() => { setCurrentPath('/home/pi/Documents'); setView('explorer'); }}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all"
-          >
-            <Star className="w-4 h-4 text-amber-500/50" /> Documents
-          </button>
-          <button 
-            onClick={() => { setCurrentPath('/'); setView('explorer'); }}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50 transition-all"
-          >
-            <Terminal className="w-4 h-4 text-zinc-600" /> Root (/)
-          </button>
-        </nav>
-      </aside>
-
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="flex items-center justify-between px-8 py-6 border-b border-zinc-800/50 bg-[#0a0a0a]/50 backdrop-blur-md">
-          <div className="flex items-center gap-4">
-             {updateAvailable && (
-                <motion.button
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={runUpdate}
-                  disabled={updating}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all"
+          <div className="mt-auto">
+             <div className="p-6 rounded-3xl bg-zinc-100 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold dark:text-zinc-400">Appearance</span>
+                  <span className="text-[10px] text-zinc-500 uppercase font-black">{theme} Mode</span>
+                </div>
+                {/* Theme Toggle Switch */}
+                <button 
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  className="relative w-12 h-6 rounded-full bg-zinc-200 dark:bg-zinc-800 transition-colors p-1"
                 >
-                  {updating ? (
-                    <><Activity className="w-3 h-3 animate-spin" /> Updating...</>
-                  ) : (
-                    <><Download className="w-3 h-3" /> Update Ready</>
-                  )}
-                </motion.button>
-              )}
+                  <motion.div 
+                    animate={{ x: theme === 'dark' ? 24 : 0 }}
+                    className="w-4 h-4 rounded-full bg-white dark:bg-indigo-500 shadow-sm flex items-center justify-center"
+                  >
+                    {theme === 'dark' ? <Moon className="w-2.5 h-2.5" /> : <Sun className="w-2.5 h-2.5 text-zinc-400" />}
+                  </motion.div>
+                </button>
+             </div>
           </div>
-          
-          <div className="flex items-center gap-4 text-xs font-mono text-zinc-500 bg-zinc-900/50 px-4 py-2 rounded-full border border-zinc-800">
-            <Activity className={`w-3 h-3 ${loading ? 'text-amber-500 animate-spin' : 'text-emerald-500 animate-pulse'}`} />
-            {loading ? 'BUSY' : 'READY'}
-          </div>
-        </header>
+        </aside>
 
-        <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={view + currentPath}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-            >
-              {view === 'dashboard' && renderDashboard()}
-              {view === 'explorer' && renderExplorer()}
-              {view === 'editor' && renderEditor()}
-              {view === 'recent' && renderRecent()}
-            </motion.div>
-          </AnimatePresence>
+        <main className="flex-1 flex flex-col h-full min-w-0 bg-transparent">
+          <header className="px-10 py-8 flex items-center justify-between">
+            <div className="flex flex-col">
+              <h2 className="text-2xl font-black capitalize tracking-tight">{view}</h2>
+              <p className="text-xs text-zinc-500 font-medium">Control and manage your filesystem with ease.</p>
+            </div>
+            
+            <div className="flex items-center gap-4 text-xs font-mono text-zinc-500 bg-white dark:bg-zinc-900/50 px-5 py-2.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+              <Activity className={cn("w-3.5 h-3.5", loading ? "text-amber-500 animate-spin" : "text-emerald-500")} />
+              {loading ? 'BUSY' : 'READY'}
+            </div>
+          </header>
+
+          <div className="flex-1 overflow-y-auto px-10 pb-10 custom-scrollbar">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={view + currentPath}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+              >
+                {view === 'dashboard' && renderDashboard()}
+                {view === 'explorer' && renderExplorer()}
+                {view === 'editor' && renderEditor()}
+                {view === 'recent' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {recentFiles.map(file => (
+                      <div key={file.path} onClick={() => openFile(file)} className="p-4 rounded-2xl bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 transition-all cursor-pointer group flex items-center gap-4">
+                        <div className="p-3 bg-zinc-100 dark:bg-zinc-800 rounded-xl group-hover:bg-indigo-500/10 transition-colors">
+                          <FileIcon className="w-5 h-5 text-zinc-400 group-hover:text-indigo-500" />
+                        </div>
+                        <div className="flex-1 overflow-hidden">
+                          <p className="font-bold text-sm truncate">{file.name}</p>
+                          <p className="text-[10px] text-zinc-500 truncate font-mono">{file.path}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
         </main>
       </div>
 
       <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { 
+          background: ${theme === 'dark' ? '#27272a' : '#e4e4e7'}; 
+          border-radius: 10px; 
         }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #1f1f1f;
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #2f2f2f;
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { 
+          background: ${theme === 'dark' ? '#3f3f46' : '#d4d4d8'}; 
         }
       `}</style>
     </div>

@@ -1,50 +1,50 @@
 {
   "build": {
-    "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
     "devPath": "http://localhost:3000",
     "distDir": "../frontend/out",
     "withGlobalTauri": true
   },
   "package": {
-    "productName": "Master Browser",
-    "version": "0.1.5"
+    "productName": "master-browser",
+    "version": "0.1.6"
   },
   "tauri": {
-    "updater": {
-      "active": false,
-      "endpoints": [
-        "https://gist.githubusercontent.com/Clawdy/master-browser-update/raw/update.json"
-      ],
-      "dialog": false,
-      "pubkey": ""
-    },
     "allowlist": {
-      "all": true
+      "all": true,
+      "shell": {
+        "all": false,
+        "open": true
+      }
     },
     "bundle": {
       "active": true,
       "targets": "all",
-      "identifier": "com.masterbrowser.app",
+      "identifier": "com.master.browser",
       "icon": [
         "icons/32x32.png",
         "icons/128x128.png",
         "icons/128x128@2x.png",
-        "icons/icon.png",
-        "icons/icon.ico",
-        "icons/icon.icns"
+        "icons/icon.icns",
+        "icons/icon.ico"
       ]
     },
     "security": {
       "csp": null
     },
+    "updater": {
+      "active": false
+    },
     "windows": [
       {
         "fullscreen": false,
-        "height": 600,
         "resizable": true,
         "title": "Master Browser",
-        "width": 800
+        "width": 1200,
+        "height": 800,
+        "decorations": true,
+        "transparent": true
       }
     ]
   }
