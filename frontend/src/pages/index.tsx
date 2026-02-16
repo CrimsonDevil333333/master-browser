@@ -13,7 +13,7 @@ import { checkUpdate, installUpdate } from '@tauri-apps/api/updater';
 import { sendNotification, isPermissionGranted, requestPermission } from '@tauri-apps/api/notification';
 import { relaunch } from '@tauri-apps/api/process';
 import { Toaster, toast } from 'sonner';
-import { MediaViewer } from './components/MediaViewer';
+import { MediaViewer } from '../components/MediaViewer';
 
 // --- Types ---
 
