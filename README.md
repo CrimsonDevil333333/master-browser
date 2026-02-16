@@ -30,13 +30,18 @@ A full-featured, high-performance file explorer and editor built with **Rust (Ta
 
 ### Prerequisites
 - [Rust](https://rustup.rs/) (latest stable)
-- [Node.js](https://nodejs.org/) (v18+)
-- Webkit2GTK (for Linux)
+- [Node.js](https://nodejs.org/) (v20+)
+- Webkit2GTK (for Linux builds)
 
 ### Setup
 ```bash
-# Install dependencies
-npm install
+# Clone the repository
+git clone https://github.com/CrimsonDevil333333/master-browser.git
+cd master-browser
+
+# IMPORTANT: Install all dependencies (Root & Frontend)
+# Use this flag to resolve older library peer conflicts
+npm install --legacy-peer-deps
 
 # Run in development mode
 npm run tauri dev
@@ -44,7 +49,7 @@ npm run tauri dev
 
 ### Build
 ```bash
-# Build production bundle
+# Build production bundle for your current OS
 npm run tauri build
 ```
 
