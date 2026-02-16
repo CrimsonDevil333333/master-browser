@@ -18,6 +18,18 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchDisks = async () => {
+      // Check if we are running in Tauri
+      if (!(window as any).__TAURI_IPC__) {
+        console.warn('Tauri IPC not detected. Running in browser mode with dummy data.');
+        setDisks([
+          { name: 'Local Disk (C:)', mount_point: 'C:\\', fs_type: 'NTFS', total_space: 512000000000, available_space: 128000000000, is_removable: false },
+          { name: 'Recovery', mount_point: 'D:\\', fs_type: 'NTFS', total_space: 16000000000, available_space: 2000000000, is_removable: false },
+          { name: 'Linux Project', mount_point: 'E:\\', fs_type: 'ext4', total_space: 100000000000, available_space: 45000000000, is_removable: true }
+        ]);
+        setLoading(false);
+        return;
+      }
+
       try {
         const result = await invoke<Disk[]>('list_disks');
         setDisks(result);
