@@ -7,8 +7,8 @@
     "withGlobalTauri": true
   },
   "package": {
-    "productName": "master-browser",
-    "version": "0.1.6"
+    "productName": "Master Browser",
+    "version": "0.1.7"
   },
   "tauri": {
     "allowlist": {
@@ -43,8 +43,9 @@
         "title": "Master Browser",
         "width": 1200,
         "height": 800,
-        "decorations": true,
-        "transparent": true
+        "decorations": false,
+        "transparent": true,
+        "fileDropEnabled": true
       }
     ]
   }

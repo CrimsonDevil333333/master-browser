@@ -1,6 +1,6 @@
 [package]
 name = "master-browser"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 build = "build.rs"
 
@@ -16,6 +16,9 @@ sysinfo = "0.29"
 walkdir = "2"
 zip = "0.6"
 clap = { version = "4.4", features = ["derive"] }
+hex = "0.4"
+reqwest = { version = "0.11", features = ["json"] }
+regex = "1"
 
 [build-dependencies]
 tauri-build = "1.5"

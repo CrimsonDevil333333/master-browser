@@ -325,6 +325,7 @@ fn get_recent_files() -> Vec<RecentFile> {
 }
 
 use tauri::api::path::{app_data_dir, home_dir, desktop_dir, document_dir, download_dir};
+use regex::Regex;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct QuickNavPaths {
@@ -332,6 +333,62 @@ pub struct QuickNavPaths {
     pub documents: String,
     pub downloads: String,
     pub desktop: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SystemStats {
+    pub cpu_usage: f32,
+    pub ram_used: u64,
+    pub ram_total: u64,
+    pub net_upload: u64,
+    pub net_download: u64,
+}
+
+#[tauri::command]
+fn get_system_stats() -> SystemStats {
+    let mut sys = System::new_all();
+    sys.refresh_all();
+    
+    let cpu_usage = sys.global_cpu_info().cpu_usage();
+    let ram_used = sys.used_memory();
+    let ram_total = sys.total_memory();
+    
+    let mut net_upload = 0;
+    let mut net_download = 0;
+    for (_iface, data) in sys.networks() {
+        net_upload += data.transmitted();
+        net_download += data.received();
+    }
+
+    SystemStats {
+        cpu_usage,
+        ram_used,
+        ram_total,
+        net_upload,
+        net_download,
+    }
+}
+
+#[tauri::command]
+fn bulk_rename(paths: Vec<String>, pattern: String, replacement: String) -> Result<usize, String> {
+    let re = Regex::new(&pattern).map_err(|e| e.to_string())?;
+    let mut count = 0;
+
+    for path_str in paths {
+        let path = Path::new(&path_str);
+        if let Some(file_name) = path.file_name() {
+            let name_str = file_name.to_string_lossy();
+            let new_name = re.replace_all(&name_str, &replacement);
+            
+            if new_name != name_str {
+                let mut new_path = path.to_path_buf();
+                new_path.set_file_name(new_name.as_ref());
+                fs::rename(path, new_path).map_err(|e| e.to_string())?;
+                count += 1;
+            }
+        }
+    }
+    Ok(count)
 }
 
 #[tauri::command]
@@ -382,6 +439,7 @@ fn windows_mount_vhdx(path: String) -> Result<String, String> {
     }
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = path;
         Err("VHDX mounting is only supported on Windows".to_string())
     }
 }
@@ -403,7 +461,9 @@ fn main() {
             get_quick_nav_paths,
             read_file_hex,
             check_for_updates,
-            windows_mount_vhdx
+            windows_mount_vhdx,
+            get_system_stats,
+            bulk_rename
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
