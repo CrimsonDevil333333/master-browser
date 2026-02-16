@@ -1,5 +1,5 @@
 [package]
-name = "app"
+name = "master-browser"
 version = "0.1.6"
 edition = "2021"
 build = "build.rs"
@@ -14,10 +14,8 @@ log = "0.4"
 env_logger = "0.10"
 sysinfo = "0.29"
 walkdir = "2"
-clap = { version = "4.4", features = ["derive"] }
 zip = "0.6"
-chrono = "0.4"
-libc = "0.2"
+clap = { version = "4.4", features = ["derive"] }
 
 [build-dependencies]
 tauri-build = "1.5"
