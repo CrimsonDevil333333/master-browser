@@ -32,7 +32,7 @@ once_cell = "1.19"
 ext4_rs = { git = "https://github.com/yuoo655/ext4_rs", branch = "master" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-webkit2gtk = { version = "0.18", default-features = false, features = ["v2_12"] }
+webkit2gtk = { version = "2.0", features = ["v2_38"] }
 
 [build-dependencies]
 tauri-build = "1"
