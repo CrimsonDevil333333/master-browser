@@ -58,5 +58,5 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Master Browser v${{ github.ref_name }}"
           releaseBody: "Universal Filesystem Bridge - Release ${{ github.ref_name }}"
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false

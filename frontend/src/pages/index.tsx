@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { convertFileSrc, invoke } from '@tauri-apps/api/tauri';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -26,6 +26,7 @@ import {
   FolderPlus,
   Pencil,
   Ban,
+  Keyboard,
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { RawDiskViewer } from '../components/RawDiskViewer';
@@ -83,6 +84,8 @@ export default function MasterBrowser() {
   const [terminalHistoryIndex, setTerminalHistoryIndex] = useState<number>(-1);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path?: string } | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -174,8 +177,19 @@ export default function MasterBrowser() {
         }
       }
 
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+
+      if ((e.key === '?' && !e.ctrlKey && !e.metaKey) || ((e.ctrlKey || e.metaKey) && e.key === '/')) {
+        e.preventDefault();
+        setShortcutsOpen((prev) => !prev);
+      }
+
       if (e.key === 'Escape') {
         setContextMenu(null);
+        setShortcutsOpen(false);
       }
     };
 
@@ -522,6 +536,7 @@ export default function MasterBrowser() {
             <div className="relative text-white">
               <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
               <input
+                ref={searchInputRef}
                 type="text"
                 placeholder="Search..."
                 value={searchQuery}
@@ -529,6 +544,13 @@ export default function MasterBrowser() {
                 className="bg-zinc-900 border border-zinc-800 rounded-xl pl-11 pr-4 py-2.5 text-xs font-bold outline-none w-64"
               />
             </div>
+            <button
+              onClick={() => setShortcutsOpen(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-zinc-300 border border-zinc-700 hover:bg-zinc-900 text-[10px] font-black uppercase"
+              title="Show keyboard shortcuts"
+            >
+              <Keyboard className="w-3 h-3" /> Shortcuts
+            </button>
             <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 rounded-lg text-emerald-400 text-[10px] font-black uppercase border border-emerald-500/20">
               <Activity className="w-3 h-3" /> Live
             </div>
@@ -698,6 +720,27 @@ export default function MasterBrowser() {
           </AnimatePresence>
         </div>
       </main>
+
+      {shortcutsOpen && (
+        <div className="fixed inset-0 z-[115] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setShortcutsOpen(false)}>
+          <div className="w-full max-w-2xl rounded-3xl border border-zinc-700 bg-zinc-900 p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-black">Keyboard Shortcuts</h3>
+              <button className="p-2 rounded-lg hover:bg-zinc-800" onClick={() => setShortcutsOpen(false)}><X className="w-4 h-4" /></button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="p-3 rounded-xl bg-zinc-800/70 border border-zinc-700"><b>Ctrl/Cmd + K</b><br />Focus search</div>
+              <div className="p-3 rounded-xl bg-zinc-800/70 border border-zinc-700"><b>Ctrl/Cmd + S</b><br />Save active file</div>
+              <div className="p-3 rounded-xl bg-zinc-800/70 border border-zinc-700"><b>?</b> or <b>Ctrl/Cmd + /</b><br />Toggle shortcuts panel</div>
+              <div className="p-3 rounded-xl bg-zinc-800/70 border border-zinc-700"><b>Esc</b><br />Close menus/panels</div>
+              <div className="p-3 rounded-xl bg-zinc-800/70 border border-zinc-700"><b>Explorer: Ctrl/Cmd + Click</b><br />Toggle multi-select</div>
+              <div className="p-3 rounded-xl bg-zinc-800/70 border border-zinc-700"><b>Explorer: Shift + Click</b><br />Range select</div>
+              <div className="p-3 rounded-xl bg-zinc-800/70 border border-zinc-700"><b>Terminal: Arrow Up/Down</b><br />Command history</div>
+              <div className="p-3 rounded-xl bg-zinc-800/70 border border-zinc-700"><b>Terminal: Enter</b><br />Run command</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {contextMenu && view === 'explorer' && (
         <div

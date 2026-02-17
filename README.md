@@ -1,65 +1,145 @@
 <div align="center">
   <img src="src-tauri/icons/icon.png" width="160" height="160" alt="Master Browser Logo" />
   <h1>🧭 Master Browser</h1>
-  <p><b>The Universal User-Space Filesystem Bridge</b></p>
-  <p><i>Bridge the gap between Windows, macOS, and Linux without kernel drivers.</i></p>
+  <p><b>Universal User-Space Filesystem Bridge (Tauri + Rust)</b></p>
+  <p><i>Explore and operate across NTFS/FAT/ext-family style storage from one hardened desktop UI.</i></p>
 </div>
 
 ---
 
-**Master Browser** is a high-performance filesystem explorer built with **Rust + Tauri**. It allows direct, sector-level access to filesystems like **Ext4, NTFS, Btrfs, XFS, and exFAT**, even on platforms where they aren't natively supported.
+## What is Master Browser?
+
+**Master Browser** is a native desktop file operations app built with **Rust + Tauri + Next.js** focused on:
+
+- fast file navigation,
+- low-level raw partition inspection,
+- integrated terminal execution,
+- in-app code/text editing,
+- production-safe daily operations (copy/move/delete/rename/create).
+
+No mock data paths are used for core actions — operations are wired to real backend commands.
+
+---
 
 ## 📸 Screenshots
-| Dashboard | Explorer | Raw Probe |
-| :---: | :---: | :---: |
-| ![Dashboard](docs/images/dashboard.png) | ![Explorer](docs/images/explorer.png) | ![Raw Probe](docs/images/raw_probe.png) |
 
-## 🚀 Key Features
-- **Universal Bridge**: Read/Write Ext4, XFS, Btrfs, NTFS, and FAT (12/16/32) / exFAT partitions natively.
-- **User-Space Drivers**: Bypasses the OS kernel to "see" unmounted partitions (Windows disks on Mac, Linux disks on Windows, etc) via direct sector-level probing.
-- **60 FPS Performance**: Virtualized file lists handle thousands of files with zero lag.
-- **Shadow Dark Interface**: Modern, sleek UI with fluid Framer Motion transitions.
-- **Specialized Viewers**: Deep inspection for CSV, JSON, and Code files.
-- **Neural Audio Player**: Integrated high-fidelity audio playback.
+> Place screenshots in `docs/images/` with these exact names.
 
-## 🛠️ Tech Stack
-- **Backend**: Rust, Tauri, `sysinfo`, `ext4`, `ntfs`, `fatfs`
-- **Frontend**: Next.js, React, Tailwind CSS, Framer Motion, `react-window`
+| Dashboard | Explorer |
+| :---: | :---: |
+| ![Dashboard](docs/images/dashboard.png) | ![Explorer](docs/images/explorer.png) |
 
-## 🏗️ Getting Started
+| Editor | Terminal |
+| :---: | :---: |
+| ![Editor](docs/images/editor.png) | ![Terminal](docs/images/terminal.png) |
 
-### 1. Prerequisites
-- **Rust**: [rustup.rs](https://rustup.rs/)
-- **Node.js**: v18 or later
-- **Linux Deps**: `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `librsvg2-dev`
+| Media Viewer |
+| :---: |
+| ![Media Viewer](docs/images/media-viewer.png) |
 
-### 2. Installation
+---
+
+## ✅ Core Features
+
+### 1) Filesystem Explorer
+- Navigate directories with direct path input.
+- Multi-select with:
+  - `Ctrl/Cmd + Click` → toggle item selection
+  - `Shift + Click` → range selection
+- Actions:
+  - copy / move / paste
+  - delete
+  - rename
+  - create file
+  - create folder
+- Right-click context menu (Explorer):
+  - Open, Rename, Copy, Move, Delete, New File, New Folder, Paste.
+
+### 2) Integrated Editor
+- Monaco-based editor with syntax support for common source/text formats.
+- Dirty-state tracking (`SAVED / UNSAVED`).
+- Unsaved-change leave confirmation.
+- `Ctrl/Cmd + S` save shortcut.
+
+### 3) Integrated Terminal
+- In-app command execution from current explorer path.
+- Command history via arrow keys.
+- Run-state lock to avoid overlapping command issues.
+- Terminal command cancellation for long-running commands.
+
+### 4) Dashboard + Telemetry
+- Drive cards with capacity/free-space indicators.
+- Live status presentation in UI shell.
+
+### 5) Raw Probe
+- Raw block-device inspection flow integrated via Rust backend parser module.
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+- `Ctrl/Cmd + K` → focus search
+- `Ctrl/Cmd + S` → save active file (editor)
+- `?` or `Ctrl/Cmd + /` → toggle shortcut panel
+- `Esc` → close floating menus/panels
+- `Arrow Up/Down` (terminal input) → command history
+- `Enter` (terminal input) → execute command
+
+---
+
+## 🛠 Tech Stack
+
+- **Backend:** Rust, Tauri, sysinfo, walkdir, zip, image, regex
+- **Frontend:** Next.js, React, Tailwind CSS, Framer Motion, Monaco Editor
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Rust toolchain (`rustup`)
+- Node.js 18+
+- npm
+
+### Install
+
 ```bash
-# Clone the repo
 git clone https://github.com/CrimsonDevil333333/master-browser.git
 cd master-browser
-
-# Install dependencies
 npm install
-cd frontend && npm install
+npm install --prefix frontend
 ```
 
-### 3. Development
-Run the app in development mode with hot-reloading:
+### Development
+
 ```bash
-# Start the Tauri dev environment
 npm run tauri dev
 ```
 
-### 4. Production Build
-Generate a standalone executable for your platform:
+### Production Build
+
 ```bash
-# Build the production binaries
 npm run tauri build
 ```
 
-## 🛡️ Usage Notes (Windows)
-To access raw physical disks (unmounted ext4/NTFS drives), you **must** run the application with **Administrator Privileges**. Right-click the executable and select **"Run as Administrator"**.
+---
+
+## 🧩 Release Automation
+
+GitHub Actions release pipeline runs on `v*` tags and builds for:
+- macOS
+- Ubuntu
+- Windows
+
+Releases are configured for **automatic publish** (non-draft).
 
 ---
-*Developed by the OpenClaw Swarm for Satyaa.*
+
+## 🛡 Windows Note
+
+For raw physical disk inspection features, launch with **Administrator** privileges.
+
+---
+
+Built by OpenClaw Swarm for Satyaa. 🦞
