@@ -82,7 +82,7 @@ export default function MasterBrowser() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [clipboard, setClipboard] = useState<{ paths: string[]; type: 'copy' | 'move' } | null>(null);
-  const [activeFile, setActiveFile] = useState<{ path: string; content: string; originalContent: string; type: ViewerType } | null>(null);
+  const [activeFile, setActiveFile] = useState<{ path: string; content: string; originalContent: string; type: ViewerType; source?: 'host' | 'partition'; partitionPath?: string; relativePath?: string } | null>(null);
   const [mediaOverlay, setMediaOverlay] = useState<{ path: string; type: 'image' | 'video' | 'audio' } | null>(null);
   const [terminalInput, setTerminalInput] = useState('');
   const [terminalOutput, setTerminalOutput] = useState<string[]>(['Sovereign Shell v0.2.19 connected.']);
@@ -282,7 +282,7 @@ export default function MasterBrowser() {
     setLoading(true);
     try {
       const content = await invoke<string>('read_file_content', { path: file.path });
-      setActiveFile({ path: file.path, content, originalContent: content, type });
+      setActiveFile({ path: file.path, content, originalContent: content, type, source: 'host' });
       await invoke('track_recent_file', { path: file.path });
       setView('editor');
     } catch {
@@ -295,7 +295,15 @@ export default function MasterBrowser() {
   const saveFile = async () => {
     if (!activeFile) return;
     try {
-      await invoke('write_file_content', { path: activeFile.path, content: activeFile.content });
+      if (activeFile.source === 'partition' && activeFile.partitionPath && activeFile.relativePath) {
+        await invoke('write_partition_file', {
+          path: activeFile.partitionPath,
+          relativePath: activeFile.relativePath,
+          content: activeFile.content,
+        });
+      } else {
+        await invoke('write_file_content', { path: activeFile.path, content: activeFile.content });
+      }
       setActiveFile((prev) => (prev ? { ...prev, originalContent: prev.content } : null));
       toast.success('File saved');
     } catch {
@@ -877,7 +885,28 @@ export default function MasterBrowser() {
               )}
 
               {view === 'dashboard' && renderDashboard()}
-              {view === 'raw' && <RawDiskViewer onOpenPath={(path) => { setCurrentPath(path); guardedSetView('explorer'); }} />}
+              {view === 'raw' && (
+                <RawDiskViewer
+                  onOpenPath={(path) => {
+                    setCurrentPath(path);
+                    guardedSetView('explorer');
+                  }}
+                  onOpenVirtualFile={({ partitionPath, relativePath, content }) => {
+                    const name = relativePath.split('/').pop() || relativePath;
+                    const type = getFileType(name);
+                    setActiveFile({
+                      path: `[partition] ${relativePath}`,
+                      content,
+                      originalContent: content,
+                      type,
+                      source: 'partition',
+                      partitionPath,
+                      relativePath,
+                    });
+                    guardedSetView('editor');
+                  }}
+                />
+              )}
             </motion.div>
           </AnimatePresence>
         </div>

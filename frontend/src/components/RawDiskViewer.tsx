@@ -43,7 +43,7 @@ interface RootEntry {
   is_dir: boolean;
   size: number;
 }
-export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = ({ onOpenPath }) => {
+export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void; onOpenVirtualFile?: (payload: { partitionPath: string; relativePath: string; content: string }) => void }> = ({ onOpenPath, onOpenVirtualFile }) => {
   const [devices, setDevices] = useState<RawBlockDevice[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedPart, setSelectedPart] = useState<RawPartition | null>(null);
@@ -335,7 +335,17 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
 
                     {filePreview && (
                       <div className="space-y-2">
-                        <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest px-2">File Preview: {filePreview.name}</p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest px-2">File Preview: {filePreview.name}</p>
+                          {onOpenVirtualFile && selectedPart && (
+                            <button
+                              className="text-[10px] px-3 py-1 rounded border border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/10"
+                              onClick={() => onOpenVirtualFile({ partitionPath: selectedPart.path, relativePath: filePreview.name, content: filePreview.content })}
+                            >
+                              Open in Editor
+                            </button>
+                          )}
+                        </div>
                         <pre className="p-4 rounded-2xl border border-zinc-800 bg-black/30 text-xs text-zinc-300 max-h-56 overflow-auto whitespace-pre-wrap">{filePreview.content}</pre>
                       </div>
                     )}

@@ -685,6 +685,15 @@ fn read_partition_file_preview(path: String, relative_path: String, limit: usize
 }
 
 #[tauri::command]
+fn write_partition_file(path: String, relative_path: String, content: String) -> Result<(), String> {
+    let mount_point = resolve_partition_browse_base(&path)?;
+    let rel = relative_path.trim_start_matches('/').trim_start_matches('\\');
+    let target = Path::new(&mount_point).join(rel);
+    fs::write(&target, content).map_err(|e| format!("{}: {}", target.to_string_lossy(), e))?;
+    Ok(())
+}
+
+#[tauri::command]
 fn get_partition_mount_path(path: String) -> Result<Option<String>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -797,6 +806,7 @@ fn main() {
             list_partition_root_entries,
             list_partition_entries,
             read_partition_file_preview,
+            write_partition_file,
             scan_local_network,
             get_raw_devices,
             inspect_partition_details
