@@ -27,6 +27,9 @@ import {
   Pencil,
   Ban,
   Keyboard,
+  Clock3,
+  Star,
+  Globe,
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { RawDiskViewer } from '../components/RawDiskViewer';
@@ -58,7 +61,13 @@ interface SystemStats {
   net_download: number;
 }
 
-type ViewMode = 'dashboard' | 'explorer' | 'terminal' | 'raw' | 'editor';
+interface RecentFile {
+  path: string;
+  name: string;
+  timestamp: number;
+}
+
+type ViewMode = 'dashboard' | 'explorer' | 'terminal' | 'raw' | 'editor' | 'chronology' | 'anchors' | 'nexus';
 type ViewerType = 'image' | 'video' | 'audio' | 'code' | 'markdown' | 'other';
 
 const cn = (...inputs: any[]) => inputs.filter(Boolean).join(' ');
@@ -85,6 +94,10 @@ export default function MasterBrowser() {
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path?: string } | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
+  const [anchors, setAnchors] = useState<string[]>([]);
+  const [networkNodes, setNetworkNodes] = useState<string[]>([]);
+  const [networkLoading, setNetworkLoading] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -130,8 +143,37 @@ export default function MasterBrowser() {
     } catch {}
   };
 
+  const fetchRecentFiles = async () => {
+    if (!isTauri) return;
+    try {
+      const res = await invoke<RecentFile[]>('get_recent_files');
+      setRecentFiles(res);
+    } catch {}
+  };
+
+  const scanNetwork = async () => {
+    if (!isTauri) return;
+    setNetworkLoading(true);
+    try {
+      const res = await invoke<string[]>('scan_local_network');
+      setNetworkNodes(res);
+    } catch {
+      toast.error('Network scan failed');
+    } finally {
+      setNetworkLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchDisks();
+    fetchRecentFiles();
+  }, []);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('master-browser-anchors');
+    if (stored) {
+      try { setAnchors(JSON.parse(stored)); } catch {}
+    }
   }, []);
 
   useEffect(() => {
@@ -143,6 +185,12 @@ export default function MasterBrowser() {
     if (view === 'explorer' && currentPath) {
       fetchDirectory(currentPath);
       setPathInput(currentPath);
+    }
+    if (view === 'chronology') {
+      fetchRecentFiles();
+    }
+    if (view === 'nexus') {
+      scanNetwork();
     }
   }, [view, currentPath]);
 
@@ -235,6 +283,7 @@ export default function MasterBrowser() {
     try {
       const content = await invoke<string>('read_file_content', { path: file.path });
       setActiveFile({ path: file.path, content, originalContent: content, type });
+      await invoke('track_recent_file', { path: file.path });
       setView('editor');
     } catch {
       toast.error('Binary or protected file');
@@ -335,6 +384,25 @@ export default function MasterBrowser() {
     } catch {
       toast.error('Rename failed');
     }
+  };
+
+  const saveAnchors = (next: string[]) => {
+    setAnchors(next);
+    localStorage.setItem('master-browser-anchors', JSON.stringify(next));
+  };
+
+  const addAnchor = () => {
+    if (!currentPath) return;
+    if (anchors.includes(currentPath)) {
+      toast.info('Already pinned');
+      return;
+    }
+    saveAnchors([currentPath, ...anchors].slice(0, 100));
+    toast.success('Pinned to Anchors');
+  };
+
+  const removeAnchor = (path: string) => {
+    saveAnchors(anchors.filter((a) => a !== path));
   };
 
   const cancelTerminalCommand = async () => {
@@ -511,7 +579,10 @@ export default function MasterBrowser() {
           {[
             { id: 'dashboard', icon: Home, label: 'Dashboard' },
             { id: 'explorer', icon: LayoutGrid, label: 'Explorer' },
+            { id: 'chronology', icon: Clock3, label: 'Chronology' },
+            { id: 'anchors', icon: Star, label: 'Anchors' },
             { id: 'raw', icon: Database, label: 'Raw Probe' },
+            { id: 'nexus', icon: Globe, label: 'Nexus Scan' },
             { id: 'terminal', icon: Terminal, label: 'Terminal' },
           ].map((item) => (
             <button
@@ -592,6 +663,9 @@ export default function MasterBrowser() {
                       <button type="button" onClick={() => handleAction('paste')} className={cn('p-2', clipboard ? 'text-amber-500' : 'text-zinc-400')} title="Paste">
                         <Clipboard className="w-4 h-4" />
                       </button>
+                      <button type="button" onClick={addAnchor} className="p-2 text-zinc-400 hover:text-amber-400" title="Pin current path">
+                        <Star className="w-4 h-4" />
+                      </button>
                       <button type="button" onClick={() => handleAction('delete')} className="p-2 text-zinc-400 hover:text-red-500" title="Delete">
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -634,6 +708,65 @@ export default function MasterBrowser() {
                           <ChevronRight className="w-4 h-4 text-zinc-700" />
                         </div>
                       ))}
+                  </div>
+                </div>
+              )}
+
+              {view === 'chronology' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400">Recent Activity</h3>
+                    <button className="px-3 py-2 text-xs rounded-lg border border-zinc-700 hover:bg-zinc-900" onClick={fetchRecentFiles}>Refresh</button>
+                  </div>
+                  <div className="space-y-2">
+                    {recentFiles.length === 0 && <p className="text-xs text-zinc-500">No recent files yet.</p>}
+                    {recentFiles.map((item) => (
+                      <button key={item.path} onClick={() => { setCurrentPath(item.path.split(/[/\\]/).slice(0, -1).join(item.path.includes('\\') ? '\\' : '/') || '/'); guardedSetView('explorer'); }} className="w-full text-left p-4 rounded-2xl border border-zinc-800 hover:border-indigo-500/40 bg-zinc-900/40">
+                        <p className="text-sm font-bold truncate">{item.name}</p>
+                        <p className="text-[10px] text-zinc-500 font-mono truncate">{item.path}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {view === 'anchors' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-zinc-400">Pinned Paths</h3>
+                    <button className="px-3 py-2 text-xs rounded-lg border border-zinc-700 hover:bg-zinc-900" onClick={addAnchor}>Pin Current Path</button>
+                  </div>
+                  <div className="space-y-2">
+                    {anchors.length === 0 && <p className="text-xs text-zinc-500">No anchors yet. Open Explorer and pin current path.</p>}
+                    {anchors.map((path) => (
+                      <div key={path} className="p-4 rounded-2xl border border-zinc-800 bg-zinc-900/40 flex items-center justify-between gap-3">
+                        <button className="text-left flex-1" onClick={() => { setCurrentPath(path); guardedSetView('explorer'); }}>
+                          <p className="text-xs font-mono truncate text-indigo-300">{path}</p>
+                        </button>
+                        <button className="text-[10px] px-2 py-1 rounded-lg border border-zinc-700 hover:bg-zinc-800" onClick={() => removeAnchor(path)}>Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {view === 'nexus' && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between p-6 rounded-3xl bg-indigo-600/20 border border-indigo-500/30">
+                    <div>
+                      <h3 className="text-xl font-black">Nexus Probe</h3>
+                      <p className="text-xs text-zinc-300">Live local-network neighbor discovery (no mock values)</p>
+                    </div>
+                    <button className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-black" onClick={scanNetwork} disabled={networkLoading}>{networkLoading ? 'Scanning…' : 'Execute Scan'}</button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {networkNodes.length === 0 && !networkLoading && <p className="text-xs text-zinc-500">No neighbors discovered yet.</p>}
+                    {networkNodes.map((node) => (
+                      <div key={node} className="p-6 rounded-3xl border border-zinc-800 bg-zinc-900/40">
+                        <p className="text-lg font-black">{node.split(' ')[0]}</p>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{node.replace(node.split(' ')[0], '').trim() || 'reachable host'}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

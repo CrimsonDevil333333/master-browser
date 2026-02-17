@@ -556,9 +556,54 @@ fn cancel_terminal_command(request_id: String) -> Result<(), String> {
 
 #[tauri::command]
 fn scan_local_network() -> Result<Vec<String>, String> {
-    // Basic ping scan mockup for v0.2.1
-    // Real implementation would use pnet or similar
-    Ok(vec!["192.168.1.1 (Gateway)".to_string(), "192.168.1.15 (Current Device)".to_string()])
+    #[cfg(target_os = "windows")]
+    {
+        let output = Command::new("arp")
+            .arg("-a")
+            .output()
+            .map_err(|e| format!("failed to run arp: {}", e))?;
+        let txt = String::from_utf8_lossy(&output.stdout);
+        let mut hosts = Vec::new();
+        for line in txt.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 && parts[0].chars().filter(|c| *c == '.').count() == 3 {
+                hosts.push(format!("{} {}", parts[0], parts[1]));
+            }
+        }
+        hosts.sort();
+        hosts.dedup();
+        return Ok(hosts);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut hosts: Vec<String> = Vec::new();
+
+        if let Ok(output) = Command::new("ip").args(["neigh"]).output() {
+            let txt = String::from_utf8_lossy(&output.stdout);
+            for line in txt.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if !parts.is_empty() && parts[0].chars().filter(|c| *c == '.').count() == 3 {
+                    hosts.push(line.to_string());
+                }
+            }
+        }
+
+        if hosts.is_empty() {
+            if let Ok(output) = Command::new("arp").arg("-a").output() {
+                let txt = String::from_utf8_lossy(&output.stdout);
+                for line in txt.lines() {
+                    if line.contains("(") && line.contains(")") {
+                        hosts.push(line.trim().to_string());
+                    }
+                }
+            }
+        }
+
+        hosts.sort();
+        hosts.dedup();
+        Ok(hosts)
+    }
 }
 
 mod fs_parser;

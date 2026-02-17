@@ -81,6 +81,12 @@ No mock data paths are used for core actions — operations are wired to real ba
 
 ### 5) Raw Probe
 - Raw block-device inspection flow integrated via Rust backend parser module.
+- Current mode: filesystem signature + metadata inspection (not full cross-OS mount/write yet).
+
+### 6) Restored Power Features
+- **Chronology**: real recent-file timeline from backend (`get_recent_files`).
+- **Anchors**: persistent pinned paths for quick workspace jumps.
+- **Nexus Scan**: real local-neighbor discovery via host network tables (`ip neigh` / `arp -a`) — no static hardcoded list.
 
 ---
 
@@ -143,6 +149,15 @@ GitHub Actions release pipeline runs on `v*` tags and builds for:
 Releases are configured for **automatic publish** (non-draft).
 
 ---
+
+## 🔭 Cross-Filesystem Editing Roadmap
+
+Goal: browse/edit files on Ext4/NTFS/Btrfs/XFS across platforms (including Windows) without kernel mounts.
+
+Planned delivery path:
+1. Read-only userspace tree browsing per filesystem (starting with Ext4).
+2. Safe write transactions with rollback and integrity validation.
+3. Unified explorer actions against mounted + raw partitions.
 
 ## 🛡 Windows Note
 
