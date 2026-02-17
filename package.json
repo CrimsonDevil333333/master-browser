@@ -15,7 +15,7 @@
   },
   "overrides": {
     "react-json-view": {
-      "react": "$react"
+      "react": "19.2.3"
     }
   }
 }
