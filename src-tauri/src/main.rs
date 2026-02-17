@@ -639,6 +639,25 @@ fn get_partition_access_plan(path: String) -> Result<PartitionAccessPlan, String
 }
 
 #[tauri::command]
+fn list_partition_root_entries(path: String) -> Result<Vec<FileMetadata>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = path;
+        Err("Mounted partition root listing from raw path is not available on Windows yet (userspace reader pending).".to_string())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mount_point = linux_mount_info(&path)
+            .map(|(mp, _)| mp)
+            .filter(|s| !s.is_empty())
+            .ok_or("Partition is not mounted; raw tree reader pending.".to_string())?;
+
+        list_directory(mount_point)
+    }
+}
+
+#[tauri::command]
 fn get_partition_mount_path(path: String) -> Result<Option<String>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -748,6 +767,7 @@ fn main() {
             cancel_terminal_command,
             get_partition_access_plan,
             get_partition_mount_path,
+            list_partition_root_entries,
             scan_local_network,
             get_raw_devices,
             inspect_partition_details

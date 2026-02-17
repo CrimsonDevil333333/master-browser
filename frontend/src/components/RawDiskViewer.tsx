@@ -37,12 +37,20 @@ interface PartitionAccessPlan {
   message: string;
 }
 
+interface RootEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+}
 export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = ({ onOpenPath }) => {
   const [devices, setDevices] = useState<RawBlockDevice[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedPart, setSelectedPart] = useState<RawPartition | null>(null);
   const [fsInfo, setFsInfo] = useState<FSInfo | null>(null);
   const [accessPlan, setAccessPlan] = useState<PartitionAccessPlan | null>(null);
+  const [rootEntries, setRootEntries] = useState<RootEntry[]>([]);
+  const [rootLoading, setRootLoading] = useState(false);
 
   const fetchDevices = async () => {
     setLoading(true);
@@ -67,11 +75,28 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
       ]);
       setFsInfo(res);
       setAccessPlan(plan);
+      setRootEntries([]);
       toast.success(`${res.fs_type} Signature Detected`);
     } catch (e) {
       setFsInfo(null);
       setAccessPlan(null);
+      setRootEntries([]);
       toast.error('Unknown filesystem or access denied');
+    }
+  };
+
+  const loadRootEntries = async () => {
+    if (!selectedPart) return;
+    setRootLoading(true);
+    try {
+      const entries = await invoke<RootEntry[]>('list_partition_root_entries', { path: selectedPart.path });
+      setRootEntries(entries.slice(0, 40));
+      toast.success('Loaded partition root preview');
+    } catch (e) {
+      setRootEntries([]);
+      toast.error(String(e));
+    } finally {
+      setRootLoading(false);
     }
   };
 
@@ -227,10 +252,31 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
                                 Open Mount in Explorer
                               </button>
                             )}
+                            <button
+                              onClick={loadRootEntries}
+                              disabled={rootLoading}
+                              className="ml-2 px-4 py-2 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 text-xs font-black uppercase tracking-wider hover:bg-indigo-600/30 disabled:opacity-50"
+                            >
+                              {rootLoading ? 'Loading…' : 'Preview Root Entries'}
+                            </button>
                           </div>
                         )}
                       </div>
                     </div>
+
+                    {rootEntries.length > 0 && (
+                      <div className="space-y-3">
+                        <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest px-2">Partition Root Preview</p>
+                        <div className="max-h-56 overflow-auto space-y-2 pr-2">
+                          {rootEntries.map((entry) => (
+                            <div key={entry.path} className="p-3 rounded-xl border border-zinc-800 bg-black/20 flex items-center justify-between gap-2">
+                              <p className="text-xs font-mono truncate">{entry.name}</p>
+                              <p className="text-[10px] text-zinc-500 uppercase">{entry.is_dir ? 'dir' : `${(entry.size / 1024).toFixed(1)} KB`}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-24 text-center space-y-6">
