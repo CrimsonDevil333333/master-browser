@@ -462,13 +462,21 @@ fn get_image_thumbnail(path: String, size: u32) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn run_terminal_command(command: String, dir: String) -> Result<String, String> {
-    let output = if cfg!(target_os = "windows") {
-        Command::new("cmd").args(&["/C", &command]).current_dir(dir).output()
-    } else {
-        Command::new("sh").args(&["-c", &command]).current_dir(dir).output()
-    }.map_err(|e| e.to_string())?;
-    
+async fn run_terminal_command(command: String, dir: String) -> Result<String, String> {
+    let command_clone = command.clone();
+    let dir_clone = dir.clone();
+
+    let output = tauri::async_runtime::spawn_blocking(move || {
+        if cfg!(target_os = "windows") {
+            Command::new("cmd").args(&["/C", &command_clone]).current_dir(dir_clone).output()
+        } else {
+            Command::new("sh").args(&["-c", &command_clone]).current_dir(dir_clone).output()
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| e.to_string())?;
+
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     } else {
