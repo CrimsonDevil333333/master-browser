@@ -15,7 +15,7 @@ import {
   Globe, Type, Edit3, Trash, Star as StarFilled,
   Archive, Zap, Hash, Maximize2, Tag, Music, 
   FileSearch, Key, Command as CommandIcon, ListFilter,
-  Check, User, Settings2
+  Check, User, Settings2, Play
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import * as ReactWindow from 'react-window';
@@ -64,7 +64,7 @@ interface RecentFile { path: string; name: string; timestamp: number; }
 interface QuickNav { home: string; documents: string; downloads: string; desktop: string; }
 interface SystemStats { cpu_usage: number; ram_used: number; ram_total: number; net_upload: number; net_download: number; }
 
-type ViewMode = 'dashboard' | 'explorer' | 'editor' | 'recent' | 'settings' | 'favorites' | 'network' | 'cleanup' | 'raw';
+type ViewMode = 'dashboard' | 'explorer' | 'editor' | 'recent' | 'settings' | 'favorites' | 'network' | 'cleanup' | 'raw' | 'terminal';
 type ViewerType = 'json' | 'csv' | 'code' | 'image' | 'video' | 'pdf' | 'hex' | 'markdown' | 'audio';
 
 const cn = (...inputs: any[]) => inputs.filter(Boolean).join(' ');
@@ -112,6 +112,9 @@ export default function MasterBrowser() {
   const [paletteQuery, setPaletteQuery] = useState('');
   const [networkNodes, setNetworkNodes] = useState<string[]>([]);
   const [fileTags, setFileTags] = useState<Record<string, string>>({});
+
+  const [terminalInput, setTerminalInput] = useState('');
+  const [terminalOutput, setTerminalOutput] = useState<string[]>(['Master Browser Sovereign Shell [v0.2.16]', 'Ready for command input...']);
 
   // --- Effects ---
 
@@ -235,7 +238,7 @@ export default function MasterBrowser() {
     let parent = '';
     if (path.includes(':\\')) {
         parent = parts.slice(0, -1).join('\\');
-        if (!parent.includes(':')) parent = parts[0] + '\\';
+        if (!parent.includes(':')) parent += parts[0] + '\\';
         else if (!parent.endsWith('\\')) parent += '\\';
     } else {
         parent = '/' + parts.slice(0, -1).join('/');
@@ -256,6 +259,19 @@ export default function MasterBrowser() {
     setFileTags(next);
     localStorage.setItem('mb-tags', JSON.stringify(next));
     toast.success(`Tagged: ${tag}`);
+  };
+
+  const runCommand = async () => {
+    if (!terminalInput.trim()) return;
+    const cmd = terminalInput;
+    setTerminalInput('');
+    setTerminalOutput(p => [...p, `> ${cmd}`]);
+    try {
+        const res = await invoke<string>('run_terminal_command', { command: cmd, dir: currentPath || '/' });
+        setTerminalOutput(p => [...p, res]);
+    } catch (e) {
+        setTerminalOutput(p => [...p, `Error: ${e}`]);
+    }
   };
 
   const formatSize = (bytes: number) => {
@@ -369,7 +385,7 @@ export default function MasterBrowser() {
                     { label: 'Scan Network', icon: Globe, color: 'text-emerald-500', action: () => setView('network') },
                     { label: 'Disk Cleanup', icon: Trash2, color: 'text-red-500', action: () => setView('cleanup') },
                     { label: 'System Check', icon: Activity, color: 'text-indigo-500', action: () => {} },
-                    { label: 'Terminal', icon: Terminal, color: 'text-zinc-400', action: () => {} }
+                    { label: 'Terminal', icon: Terminal, color: 'text-zinc-400', action: () => setView('terminal') }
                 ].map(act => (
                     <button key={act.label} onClick={act.action} className="p-8 rounded-[2.5rem] bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/20 dark:hover:border-white/10 shadow-lg dark:shadow-none transition-all flex flex-col items-center gap-4 text-center group">
                         <act.icon className={cn("w-8 h-8 group-hover:scale-110 transition-transform", act.color)} />
@@ -386,7 +402,7 @@ export default function MasterBrowser() {
     const filesToRender = filesToRenderRaw.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
     
     return (
-      <div className="h-full w-full min-h-[400px]">
+      <div className="h-[calc(100vh-280px)] w-full">
         {filesToRender.length > 0 ? (
             /* @ts-ignore */
             <AutoSizer>
@@ -517,7 +533,7 @@ export default function MasterBrowser() {
             <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-500 px-4">System Metadata</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 {[
-                    { label: 'Release', value: 'v0.2.14' },
+                    { label: 'Release', value: 'v0.2.16' },
                     { label: 'Codename', value: 'Sovereign' },
                     { label: 'Kernel', value: 'User-Space' },
                     { label: 'Stability', value: 'Alpha' }
@@ -528,6 +544,38 @@ export default function MasterBrowser() {
                     </div>
                 ))}
             </div>
+        </div>
+    </div>
+  );
+
+  const renderTerminal = () => (
+    <div className="flex flex-col h-full bg-[#080808] rounded-[3rem] border border-zinc-800 overflow-hidden shadow-2xl">
+        <div className="p-6 border-b border-white/5 flex items-center justify-between bg-zinc-950/40">
+            <div className="flex items-center gap-4">
+                <div className="p-2 bg-zinc-800 rounded-lg text-emerald-500"><Terminal className="w-4 h-4" /></div>
+                <span className="text-xs font-black uppercase tracking-widest text-zinc-400">Sovereign Shell</span>
+            </div>
+            <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-widest">{currentPath || '/'}</span>
+        </div>
+        <div className="flex-1 p-10 font-mono text-xs overflow-auto custom-scrollbar space-y-2">
+            {terminalOutput.map((line, i) => (
+                <p key={i} className={cn(
+                    "whitespace-pre-wrap leading-relaxed",
+                    line.startsWith('>') ? "text-indigo-400 font-black" : "text-zinc-400"
+                )}>{line}</p>
+            ))}
+        </div>
+        <div className="p-6 bg-zinc-950/60 border-t border-white/5 flex items-center gap-4">
+            <div className="text-indigo-500 font-black text-lg">λ</div>
+            <input 
+                autoFocus
+                className="flex-1 bg-transparent border-none outline-none text-xs font-mono text-zinc-100 placeholder:text-zinc-800"
+                placeholder="EXECUTE SYSTEM COMMAND..."
+                value={terminalInput}
+                onChange={e => setTerminalInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && runCommand()}
+            />
+            <button onClick={runCommand} className="p-3 bg-indigo-600 rounded-xl hover:bg-indigo-500 transition-all text-white shadow-lg shadow-indigo-600/20"><Play className="w-4 h-4" /></button>
         </div>
     </div>
   );
@@ -560,7 +608,8 @@ export default function MasterBrowser() {
                                 { id: 'home', label: 'Navigate to Home', action: () => { if (quickNav) setCurrentPath(quickNav.home); setView('explorer'); setCommandPalette(false); } },
                                 { id: 'update', label: 'Check for Updates', action: () => { invoke('check_for_updates'); setCommandPalette(false); } },
                                 { id: 'raw', label: 'Raw Partition Probe', action: () => { setView('raw'); setCommandPalette(false); } },
-                                { id: 'nexus', label: 'Nexus Network Scan', action: () => { setView('network'); setCommandPalette(false); } }
+                                { id: 'nexus', label: 'Nexus Network Scan', action: () => { setView('network'); setCommandPalette(false); } },
+                                { id: 'term', label: 'Open Terminal', action: () => { setView('terminal'); setCommandPalette(false); } }
                             ].filter(c => c.label.toLowerCase().includes(paletteQuery.toLowerCase())).map(cmd => (
                                 <button key={cmd.id} onClick={cmd.action} className="flex items-center gap-4 w-full px-6 py-4 hover:bg-zinc-100 dark:hover:bg-white/5 rounded-2xl transition-all text-sm font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white group">
                                     <div className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-xl group-hover:bg-indigo-600 transition-colors"><Zap className="w-4 h-4" /></div>
@@ -585,7 +634,7 @@ export default function MasterBrowser() {
             </div>
             <div className="flex flex-col">
                 <h1 className="text-2xl font-black tracking-tighter leading-none text-zinc-900 dark:text-zinc-100">MASTER</h1>
-                <span className="text-[8px] font-black text-indigo-500 uppercase tracking-[0.4em] mt-1 text-zinc-400 dark:text-indigo-500">Sovereign v0.2.14</span>
+                <span className="text-[8px] font-black text-indigo-500 uppercase tracking-[0.4em] mt-1 text-zinc-400 dark:text-indigo-500">Sovereign v0.2.16</span>
             </div>
           </div>
 
@@ -679,6 +728,7 @@ export default function MasterBrowser() {
                 {view === 'dashboard' && renderDashboard()}
                 {view === 'raw' && <RawDiskViewer />}
                 {view === 'settings' && renderSettings()}
+                {view === 'terminal' && renderTerminal()}
                 {view === 'explorer' && (
                     <div className={cn("grid gap-16 h-full", splitView ? "grid-cols-2" : "grid-cols-1")}>
                         <div className="flex flex-col gap-8">
@@ -727,7 +777,7 @@ export default function MasterBrowser() {
                             <button onClick={async () => {
                                 const nodes = await invoke<string[]>('scan_local_network');
                                 setNetworkNodes(nodes);
-                            }} className="p-6 bg-white/20 hover:bg-white/30 rounded-[2.5rem] transition-all flex items-center gap-4">
+                            }} className="p-6 bg-white/20 hover:bg-white/30 rounded-[2.5rem] transition-all flex items-center gap-4 text-white">
                                 <RefreshCw className="w-6 h-6" /> <span className="font-black text-sm uppercase tracking-widest">Execute Scan</span>
                             </button>
                         </div>
