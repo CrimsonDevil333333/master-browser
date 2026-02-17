@@ -1,4 +1,5 @@
 <div align="center">
+  <img src="src-tauri/icons/icon.png" width="140" height="140" alt="Master Browser Icon" />
   <h1>Master Browser</h1>
   <p><b>Universal User-Space Filesystem Bridge (Tauri + Rust)</b></p>
   <p><i>Explore and operate across NTFS/FAT/ext-family style storage from one hardened desktop UI.</i></p>
