@@ -563,6 +563,24 @@ fn cancel_terminal_command(request_id: String) -> Result<(), String> {
     Ok(())
 }
 
+fn linux_mount_info(path: &str) -> Option<(String, Option<String>)> {
+    let output = Command::new("lsblk")
+        .args(["-no", "MOUNTPOINT,FSTYPE", path])
+        .output()
+        .ok()?;
+    let txt = String::from_utf8_lossy(&output.stdout);
+    let line = txt.lines().next()?.trim();
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    if parts.is_empty() {
+        return None;
+    }
+    if parts.len() >= 2 {
+        Some((parts[0].to_string(), Some(parts[1].to_string())))
+    } else {
+        Some((parts[0].to_string(), None))
+    }
+}
+
 #[tauri::command]
 fn get_partition_access_plan(path: String) -> Result<PartitionAccessPlan, String> {
     #[cfg(target_os = "windows")]
@@ -597,19 +615,9 @@ fn get_partition_access_plan(path: String) -> Result<PartitionAccessPlan, String
 
     #[cfg(not(target_os = "windows"))]
     {
-        let output = Command::new("lsblk")
-            .args(["-no", "MOUNTPOINT,FSTYPE", &path])
-            .output()
-            .map_err(|e| e.to_string())?;
-
-        let txt = String::from_utf8_lossy(&output.stdout);
-        let line = txt.lines().next().unwrap_or("").trim();
-        let parts: Vec<&str> = line.split_whitespace().collect();
-
-        let (mount_point, fs_type) = if parts.len() >= 2 {
-            (Some(parts[0].to_string()).filter(|s| !s.is_empty()), Some(parts[1].to_string()))
-        } else if parts.len() == 1 {
-            (Some(parts[0].to_string()).filter(|s| !s.is_empty()), None)
+        let mount = linux_mount_info(&path);
+        let (mount_point, fs_type) = if let Some((mp, fs)) = mount {
+            (Some(mp).filter(|s| !s.is_empty()), fs)
         } else {
             (None, None)
         };
@@ -627,6 +635,20 @@ fn get_partition_access_plan(path: String) -> Result<PartitionAccessPlan, String
                 "Partition is not mounted. Raw userspace Ext4 browsing is the next implementation step.".to_string()
             },
         })
+    }
+}
+
+#[tauri::command]
+fn get_partition_mount_path(path: String) -> Result<Option<String>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = path;
+        Ok(None)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(linux_mount_info(&path).map(|(mp, _)| mp).filter(|s| !s.is_empty()))
     }
 }
 
@@ -725,6 +747,7 @@ fn main() {
             run_terminal_command,
             cancel_terminal_command,
             get_partition_access_plan,
+            get_partition_mount_path,
             scan_local_network,
             get_raw_devices,
             inspect_partition_details

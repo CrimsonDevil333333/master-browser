@@ -848,7 +848,7 @@ export default function MasterBrowser() {
               )}
 
               {view === 'dashboard' && renderDashboard()}
-              {view === 'raw' && <RawDiskViewer />}
+              {view === 'raw' && <RawDiskViewer onOpenPath={(path) => { setCurrentPath(path); guardedSetView('explorer'); }} />}
             </motion.div>
           </AnimatePresence>
         </div>

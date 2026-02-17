@@ -37,7 +37,7 @@ interface PartitionAccessPlan {
   message: string;
 }
 
-export const RawDiskViewer: React.FC = () => {
+export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = ({ onOpenPath }) => {
   const [devices, setDevices] = useState<RawBlockDevice[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedPart, setSelectedPart] = useState<RawPartition | null>(null);
@@ -196,13 +196,23 @@ export const RawDiskViewer: React.FC = () => {
                             Successfully parsed {fsInfo.fs_type} header via user-space driver. This metadata is extracted directly from disk sectors, making it available on all platforms regardless of OS support.
                         </p>
                         {accessPlan && (
-                          <p className="text-xs mt-3 font-medium leading-relaxed text-zinc-300">
-                            <span className={accessPlan.can_browse_now ? 'text-emerald-400' : 'text-amber-400'}>
-                              {accessPlan.can_browse_now ? 'Browse Ready:' : 'Browse Pending:'}
-                            </span>{' '}
-                            {accessPlan.message}
-                            {accessPlan.mount_point ? ` (mount: ${accessPlan.mount_point})` : ''}
-                          </p>
+                          <div className="mt-3 space-y-3">
+                            <p className="text-xs font-medium leading-relaxed text-zinc-300">
+                              <span className={accessPlan.can_browse_now ? 'text-emerald-400' : 'text-amber-400'}>
+                                {accessPlan.can_browse_now ? 'Browse Ready:' : 'Browse Pending:'}
+                              </span>{' '}
+                              {accessPlan.message}
+                              {accessPlan.mount_point ? ` (mount: ${accessPlan.mount_point})` : ''}
+                            </p>
+                            {accessPlan.can_browse_now && accessPlan.mount_point && onOpenPath && (
+                              <button
+                                onClick={() => onOpenPath(accessPlan.mount_point!)}
+                                className="px-4 py-2 rounded-xl bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 text-xs font-black uppercase tracking-wider hover:bg-emerald-600/30"
+                              >
+                                Open Mount in Explorer
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
