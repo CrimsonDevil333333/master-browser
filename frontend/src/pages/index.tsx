@@ -217,6 +217,13 @@ export default function MasterBrowser() {
     toast.success(favorites.includes(path) ? "Purged from Favorites" : "Anchored to Favorites");
   };
 
+  const navigateUp = (isSecond = false) => {
+    const path = isSecond ? secondPath : currentPath;
+    if (!path || path === '/' || path === 'C:\\') return;
+    const parent = path.substring(0, path.lastIndexOf(path.includes('/') ? '/' : '\\')) || (path.includes('/') ? '/' : 'C:\\');
+    if (isSecond) setSecondPath(parent); else setCurrentPath(parent);
+  };
+
   const setTag = (path: string, tag: string) => {
     const next = { ...fileTags, [path]: tag };
     setFileTags(next);
@@ -259,7 +266,7 @@ export default function MasterBrowser() {
              </div>}
           </div>
           <div className="p-8 bg-zinc-950/40 border-t border-white/5 flex gap-4">
-             <button onClick={() => { openFile(quickLookFile); setQuickLookLookFile(null); }} className="px-8 py-4 bg-indigo-600 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-3"><Edit3 className="w-4 h-4" /> Open in Editor</button>
+             <button onClick={() => { openFile(quickLookFile); setQuickLookFile(null); }} className="px-8 py-4 bg-indigo-600 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-3"><Edit3 className="w-4 h-4" /> Open in Editor</button>
              <button className="px-8 py-4 bg-white/5 rounded-2xl font-black text-xs uppercase tracking-widest">Properties</button>
           </div>
         </motion.div>
@@ -633,7 +640,7 @@ export default function MasterBrowser() {
                                     onChange={val => setEditingFile(p => p ? {...p, content: val || ''} : null)}
                                     options={{
                                         minimap: { enabled: false }, fontSize: 15, fontFamily: 'JetBrains Mono, monospace',
-                                        padding: { top: 60, bottom: 60, left: 60 }, backgroundColor: '#0d0d0d',
+                                        padding: { top: 60, bottom: 60 },
                                         lineNumbers: "on", scrollbar: { vertical: 'hidden' }
                                     }}
                                 />
