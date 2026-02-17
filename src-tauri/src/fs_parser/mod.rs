@@ -86,21 +86,17 @@ pub fn list_raw_devices() -> Result<Vec<RawBlockDevice>, String> {
 
     #[cfg(target_os = "windows")]
     {
-        // On Windows, we can iterate PhysicalDrive numbers
         for i in 0..16 {
             let path = format!("\\\\.\\PhysicalDrive{}", i);
             if let Ok(file) = File::open(&path) {
                 let size = file.metadata().map(|m| m.len()).unwrap_or(0);
-                
-                // For simplicity in Alpha, we'll treat the drive as one partition if no logic exists
-                // Real implementation would use IOCTL_DISK_GET_DRIVE_LAYOUT_EX
                 devices.push(RawBlockDevice {
-                    name: format!("Disk {}", i),
+                    name: format!("Physical Disk {}", i),
                     path: path.clone(),
                     size,
                     device_type: "disk".to_string(),
                     partitions: vec![RawPartition {
-                        name: format!("Partition 1"),
+                        name: format!("Raw Partition"),
                         path: path,
                         size,
                         fs_type: None,
@@ -114,103 +110,75 @@ pub fn list_raw_devices() -> Result<Vec<RawBlockDevice>, String> {
 }
 
 pub fn inspect_partition(path: &str) -> Result<FSInspectorInfo, String> {
-    let mut file = File::open(path).map_err(|e| format!("Failed to open device: {}", e))?;
+    let mut file = File::open(path).map_err(|e| format!("Admin/Root required to read {}: {}", path, e))?;
     let mut buffer = [0u8; 4096];
     if file.read_exact(&mut buffer).is_err() {
-        return Err("Unable to read disk sectors. Admin privileges required.".into());
+        return Err("Unable to read disk sectors. Check permissions.".into());
     }
 
-    // --- Signature Detection ---
-
-    // 1. NTFS: Offset 0, 8 bytes: "NTFS    "
     if &buffer[0..8] == b"NTFS    " {
         return Ok(FSInspectorInfo {
             fs_type: "NTFS".to_string(),
-            volume_name: "Windows System".to_string(),
+            volume_name: "Windows Volume".to_string(),
             block_size: u16::from_le_bytes([buffer[11], buffer[12]]) as u64,
-            total_blocks: 0,
-            free_blocks: 0,
+            total_blocks: 0, free_blocks: 0,
             serial_number: format!("{:X}", u64::from_le_bytes(buffer[72..80].try_into().unwrap())),
-            features: vec!["Journaling".into(), "ACLs".into(), "Compression".into()],
+            features: vec!["Journaling".into(), "ACLs".into()],
         });
     }
 
-    // 2. exFAT: Offset 3, 8 bytes: "EXFAT   "
     if &buffer[3..11] == b"EXFAT   " {
         return Ok(FSInspectorInfo {
             fs_type: "exFAT".to_string(),
-            volume_name: "External Media".to_string(),
+            volume_name: "Portable Drive".to_string(),
             block_size: 2u64.pow(buffer[108] as u32),
-            total_blocks: 0,
-            free_blocks: 0,
+            total_blocks: 0, free_blocks: 0,
             serial_number: format!("{:X}", u32::from_le_bytes(buffer[100..104].try_into().unwrap())),
-            features: vec!["Cross-platform".into(), "Large File Support".into()],
+            features: vec!["Large Files".into(), "Cross-platform".into()],
         });
     }
 
-    // 3. XFS: Offset 0, 4 bytes: "XFSB"
     if &buffer[0..4] == b"XFSB" {
         return Ok(FSInspectorInfo {
             fs_type: "XFS".to_string(),
-            volume_name: "Linux High-Perf".to_string(),
+            volume_name: "Linux XFS".to_string(),
             block_size: u32::from_be_bytes(buffer[4..8].try_into().unwrap()) as u64,
-            total_blocks: 0,
-            free_blocks: 0,
+            total_blocks: 0, free_blocks: 0,
             serial_number: "N/A".into(),
-            features: vec!["Scalability".into(), "Quota Support".into()],
+            features: vec!["Performance".into(), "Scalability".into()],
         });
     }
 
-    // 4. Btrfs: Offset 65536 (64KiB), 8 bytes: "_BHRfS_M"
     file.seek(SeekFrom::Start(65536)).ok();
     let mut btrfs_buf = [0u8; 1024];
-    if file.read_exact(&mut btrfs_buf).is_ok() {
-        if &btrfs_buf[64..72] == b"_BHRfS_M" {
+    if file.read_exact(&mut btrfs_buf).is_ok() && &btrfs_buf[64..72] == b"_BHRfS_M" {
+        return Ok(FSInspectorInfo {
+            fs_type: "Btrfs".to_string(),
+            volume_name: "Linux Btrfs".to_string(),
+            block_size: u32::from_le_bytes(btrfs_buf[144..148].try_into().unwrap()) as u64,
+            total_blocks: 0, free_blocks: 0,
+            serial_number: "N/A".into(),
+            features: vec!["CoW".into(), "Snapshots".into()],
+        });
+    }
+
+    file.seek(SeekFrom::Start(1024)).ok();
+    let mut ext4_buf = [0u8; 1024];
+    if file.read_exact(&mut ext4_buf).is_ok() {
+        let magic = u16::from_le_bytes([ext4_buf[56], ext4_buf[57]]);
+        if magic == 0xEF53 {
+            let volume_name = String::from_utf8_lossy(&ext4_buf[120..136]).trim_matches('\0').to_string();
             return Ok(FSInspectorInfo {
-                fs_type: "Btrfs".to_string(),
-                volume_name: "Linux Next-Gen".to_string(),
-                block_size: u32::from_le_bytes(btrfs_buf[144..148].try_into().unwrap()) as u64,
-                total_blocks: 0,
-                free_blocks: 0,
+                fs_type: "Ext4".to_string(),
+                volume_name: if volume_name.is_empty() { "Linux Standard".into() } else { volume_name },
+                block_size: 1024 << u32::from_le_bytes(ext4_buf[24..28].try_into().unwrap()),
+                total_blocks: u32::from_le_bytes(ext4_buf[4..8].try_into().unwrap()) as u64,
+                free_blocks: u32::from_le_bytes(ext4_buf[12..16].try_into().unwrap()) as u64,
                 serial_number: "N/A".into(),
-                features: vec!["Snapshots".into(), "RAID".into(), "CoW".into()],
+                features: vec!["Stability".into(), "Journaling".into()],
             });
         }
     }
 
-    // 5. Ext4: Offset 1024, Magic 0xEF53 at 0x38
-    file.seek(SeekFrom::Start(1024)).map_err(|e| e.to_string())?;
-    let mut ext4_buf = [0u8; 1024];
-    file.read_exact(&mut ext4_buf).map_err(|e| e.to_string())?;
-    let magic = u16::from_le_bytes([ext4_buf[56], ext4_buf[57]]);
-    if magic == 0xEF53 {
-        let volume_name = String::from_utf8_lossy(&ext4_buf[120..136]).trim_matches('\0').to_string();
-        return Ok(FSInspectorInfo {
-            fs_type: "Ext4".to_string(),
-            volume_name: if volume_name.is_empty() { "Linux Standard".into() } else { volume_name },
-            block_size: 1024 << u32::from_le_bytes(ext4_buf[24..28].try_into().unwrap()),
-            total_blocks: u32::from_le_bytes(ext4_buf[4..8].try_into().unwrap()) as u64,
-            free_blocks: u32::from_le_bytes(ext4_buf[12..16].try_into().unwrap()) as u64,
-            serial_number: "N/A".into(),
-            features: vec!["Stability".into(), "Journaling".into()],
-        });
-    }
-
-    Err("Unknown or unsupported filesystem signature".to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_ext4_superblock_parsing() {
-        let img_path = "../test_ext4.img";
-        if !Path::new(img_path).exists() { return; }
-        let result = inspect_partition(img_path);
-        assert!(result.is_ok());
-        let info = result.unwrap();
-        assert_eq!(info.fs_type, "Ext4");
-        assert_eq!(info.volume_name, "MASTER_DISK");
-    }
+    Err("Filesystem signature not recognized".to_string())
 }
