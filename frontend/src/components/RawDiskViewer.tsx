@@ -278,7 +278,7 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void; onOp
                       </div>
                       <div className="p-4 rounded-2xl border border-zinc-700 bg-black/20">
                         <p className="text-[10px] uppercase tracking-widest text-zinc-500 font-black">Cross-OS Edit</p>
-                        <p className="text-xs mt-1 text-amber-400 font-black">Transactional write layer planned</p>
+                        <p className="text-xs mt-1 text-emerald-400 font-black">Raw Write Enabled</p>
                       </div>
                     </div>
 

@@ -714,11 +714,19 @@ fn read_partition_file_preview(path: String, relative_path: String, limit: usize
 
 #[tauri::command]
 fn write_partition_file(path: String, relative_path: String, content: String) -> Result<(), String> {
-    let mount_point = resolve_partition_browse_base(&path)?;
-    let rel = relative_path.trim_start_matches('/').trim_start_matches('\\');
-    let target = Path::new(&mount_point).join(rel);
-    fs::write(&target, content).map_err(|e| format!("{}: {}", target.to_string_lossy(), e))?;
-    Ok(())
+    if cfg!(target_os = "windows") {
+        return ext4_raw::write_file_raw(&path, &relative_path, content.as_bytes());
+    }
+
+    match resolve_partition_browse_base(&path) {
+        Ok(mount_point) => {
+            let rel = relative_path.trim_start_matches('/').trim_start_matches('\\');
+            let target = Path::new(&mount_point).join(rel);
+            fs::write(&target, content).map_err(|e| format!("{}: {}", target.to_string_lossy(), e))?;
+            Ok(())
+        },
+        Err(_) => ext4_raw::write_file_raw(&path, &relative_path, content.as_bytes()),
+    }
 }
 
 #[tauri::command]
