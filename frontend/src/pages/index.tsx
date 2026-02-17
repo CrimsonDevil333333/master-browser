@@ -14,48 +14,59 @@ import {
   Columns, Layout, ArrowUpCircle, Cpu, Cpu as Ram,
   Globe, Type, Edit3, Trash, Star as StarFilled,
   Archive, Zap, Hash, Maximize2, Tag, Music, 
-  FileSearch, Key, Command as CommandIcon
+  FileSearch, Key, Command as CommandIcon, ListFilter
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
+import * as ReactWindow from 'react-window';
+const VirtualList = (ReactWindow as any).FixedSizeList;
+import { AutoSizer } from 'react-virtualized-auto-sizer';
 import { MediaViewer } from '../components/MediaViewer';
+import { RawDiskViewer } from '../components/RawDiskViewer';
 import Editor from '@monaco-editor/react';
-import ReactJson from 'react-json-view';
-import Papa from 'papaparse';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 import { listen } from '@tauri-apps/api/event';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
 
 // --- Types ---
 
 interface Disk {
-  name: string; mount_point: string; fs_type: string;
-  total_space: number; available_space: number; is_removable: boolean;
+  name: string;
+  mount_point: string;
+  fs_type: string;
+  total_space: number;
+  available_space: number;
+  is_removable: boolean;
 }
 
 interface FileMetadata {
-  name: string; size: number; is_dir: boolean;
-  last_modified: number; path: string; permissions: string;
-  tag?: string;
+  name: string;
+  size: number;
+  is_dir: boolean;
+  last_modified: number;
+  path: string;
+  permissions: string;
 }
 
 interface DetailedFileInfo {
-  name: string; path: string; size: number; is_dir: boolean;
-  created: number; modified: number; accessed: number;
-  permissions: string; owner?: number; group?: number; extension?: string;
+  name: string;
+  path: string;
+  size: number;
+  is_dir: boolean;
+  created: number;
+  modified: number;
+  accessed: number;
+  permissions: string;
+  owner: number | null;
+  group: number | null;
+  extension: string | null;
 }
 
 interface RecentFile { path: string; name: string; timestamp: number; }
-
 interface QuickNav { home: string; documents: string; downloads: string; desktop: string; }
-
 interface SystemStats { cpu_usage: number; ram_used: number; ram_total: number; net_upload: number; net_download: number; }
 
-type ViewMode = 'dashboard' | 'explorer' | 'editor' | 'recent' | 'settings' | 'favorites' | 'network' | 'cleanup';
+type ViewMode = 'dashboard' | 'explorer' | 'editor' | 'recent' | 'settings' | 'favorites' | 'network' | 'cleanup' | 'raw';
 type ViewerType = 'json' | 'csv' | 'code' | 'image' | 'video' | 'pdf' | 'hex' | 'markdown' | 'audio';
+
+const cn = (...inputs: any[]) => inputs.filter(Boolean).join(' ');
 
 // --- Helpers ---
 
@@ -84,7 +95,6 @@ export default function MasterBrowser() {
   const [searchQuery, setSearchQuery] = useState('');
   
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
-  const [detailedFile, setDetailedFile] = useState<DetailedFileInfo | null>(null);
   const [quickLookFile, setQuickLookFile] = useState<FileMetadata | null>(null);
   
   const [editingFile, setEditingFile] = useState<{ path: string; content: string; type: ViewerType | 'other' } | null>(null);
@@ -98,7 +108,6 @@ export default function MasterBrowser() {
   const [secondFiles, setSecondFiles] = useState<FileMetadata[]>([]);
 
   const [commandPalette, setCommandPalette] = useState(false);
-  const [paletteQuery, setPaletteQuery] = useState('');
   
   const [networkNodes, setNetworkNodes] = useState<string[]>([]);
   const [fileTags, setFileTags] = useState<Record<string, string>>({});
@@ -210,18 +219,18 @@ export default function MasterBrowser() {
     } catch (e) { toast.error('Extraction Failed'); }
   };
 
-  const toggleFavorite = (path: string) => {
-    const next = favorites.includes(path) ? favorites.filter(p => p !== path) : [...favorites, path];
-    setFavorites(next);
-    localStorage.setItem('mb-favs', JSON.stringify(next));
-    toast.success(favorites.includes(path) ? "Purged from Favorites" : "Anchored to Favorites");
-  };
-
   const navigateUp = (isSecond = false) => {
     const path = isSecond ? secondPath : currentPath;
     if (!path || path === '/' || path === 'C:\\') return;
     const parent = path.substring(0, path.lastIndexOf(path.includes('/') ? '/' : '\\')) || (path.includes('/') ? '/' : 'C:\\');
     if (isSecond) setSecondPath(parent); else setCurrentPath(parent);
+  };
+
+  const toggleFavorite = (path: string) => {
+    const next = favorites.includes(path) ? favorites.filter(p => p !== path) : [...favorites, path];
+    setFavorites(next);
+    localStorage.setItem('mb-favs', JSON.stringify(next));
+    toast.success(favorites.includes(path) ? "Purged from Favorites" : "Anchored to Favorites");
   };
 
   const setTag = (path: string, tag: string) => {
@@ -350,60 +359,77 @@ export default function MasterBrowser() {
     </div>
   );
 
-  const renderFileList = (filesToRender: FileMetadata[], pathSetter: (p: string) => void, isSecond = false) => (
-    <div className="grid grid-cols-1 gap-2">
-        {filesToRender.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase())).map((file) => {
-          const isSelected = selectedPaths.includes(file.path);
-          const type = getFileType(file.name);
-          const tag = fileTags[file.path];
-          return (
-            <motion.div
-              layout key={file.path}
-              className={cn(
-                "group flex items-center gap-5 px-8 py-5 rounded-[2rem] transition-all cursor-pointer border border-transparent",
-                isSelected ? "bg-indigo-600 text-white shadow-2xl shadow-indigo-600/20" : "hover:bg-zinc-900/60"
-              )}
-              onClick={(e) => {
-                if (e.ctrlKey || e.metaKey) setSelectedPaths(p => p.includes(file.path) ? p.filter(x => x !== file.path) : [...p, file.path]);
-                else file.is_dir ? pathSetter(file.path) : openFile(file);
-              }}
+  const renderFileList = (filesToRender: FileMetadata[], pathSetter: (p: string) => void, isSecond = false) => {
+    return (
+      <div className="h-full w-full">
+        {/* @ts-ignore */}
+        <AutoSizer>
+          {({ height, width }: { height: number; width: number }) => (
+            <VirtualList
+              height={height}
+              width={width}
+              itemCount={filesToRender.length}
+              itemSize={80}
             >
-              <div className="flex-1 flex items-center gap-6 min-w-0">
-                <div className={cn(
-                  "p-4 rounded-2xl transition-all shadow-sm group-hover:rotate-3",
-                  isSelected ? "bg-white/20 text-white" : (file.is_dir ? "bg-indigo-500/10 text-indigo-500" : "bg-zinc-800 text-zinc-500")
-                )}>
-                  {file.is_dir ? <Folder className="w-6 h-6" /> : 
-                   type === 'image' ? <ImageIcon className="w-6 h-6 text-emerald-500" /> :
-                   type === 'video' ? <VideoIcon className="w-6 h-6 text-amber-500" /> :
-                   type === 'audio' ? <Music className="w-6 h-6 text-pink-500" /> :
-                   type === 'markdown' ? <Edit3 className="w-6 h-6 text-purple-500" /> :
-                   <FileIcon className="w-6 h-6" />}
-                </div>
-                
-                <div className="flex flex-col min-w-0 gap-1">
-                  <div className="flex items-center gap-3">
-                    <span className="font-black text-sm truncate tracking-tight">{file.name}</span>
-                    {tag && <span className="px-2 py-0.5 bg-zinc-800 text-[8px] font-black text-indigo-400 rounded-full border border-indigo-500/20 uppercase tracking-widest">{tag}</span>}
+              {({ index, style }: { index: number; style: React.CSSProperties }) => {
+                const file = filesToRender[index];
+                const isSelected = selectedPaths.includes(file.path);
+                const type = getFileType(file.name);
+                const tag = fileTags[file.path];
+                return (
+                  <div style={style} className="px-2">
+                    <motion.div
+                      layout key={file.path}
+                      className={cn(
+                        "group flex items-center gap-5 px-8 py-5 rounded-[2rem] transition-all cursor-pointer border border-transparent",
+                        isSelected ? "bg-indigo-600 text-white shadow-2xl shadow-indigo-600/20" : "hover:bg-zinc-900/60"
+                      )}
+                      onClick={(e) => {
+                        if (e.ctrlKey || e.metaKey) setSelectedPaths(p => p.includes(file.path) ? p.filter(x => x !== file.path) : [...p, file.path]);
+                        else file.is_dir ? pathSetter(file.path) : openFile(file);
+                      }}
+                    >
+                      <div className="flex-1 flex items-center gap-6 min-w-0">
+                        <div className={cn(
+                          "p-4 rounded-2xl transition-all shadow-sm group-hover:rotate-3",
+                          isSelected ? "bg-white/20 text-white" : (file.is_dir ? "bg-indigo-500/10 text-indigo-500" : "bg-zinc-800 text-zinc-500")
+                        )}>
+                          {file.is_dir ? <Folder className="w-6 h-6" /> : 
+                           type === 'image' ? <ImageIcon className="w-6 h-6 text-emerald-500" /> :
+                           type === 'video' ? <VideoIcon className="w-6 h-6 text-amber-500" /> :
+                           type === 'audio' ? <Music className="w-6 h-6 text-pink-500" /> :
+                           type === 'markdown' ? <Edit3 className="w-6 h-6 text-purple-500" /> :
+                           <FileIcon className="w-6 h-6" />}
+                        </div>
+                        
+                        <div className="flex flex-col min-w-0 gap-1">
+                          <div className="flex items-center gap-3">
+                            <span className="font-black text-sm truncate tracking-tight">{file.name}</span>
+                            {tag && <span className="px-2 py-0.5 bg-zinc-800 text-[8px] font-black text-indigo-400 rounded-full border border-indigo-500/20 uppercase tracking-widest">{tag}</span>}
+                          </div>
+                          <div className={cn("flex items-center gap-3 text-[9px] font-black uppercase tracking-[0.2em]", isSelected ? "text-white/60" : "text-zinc-600")}>
+                            <span>{file.is_dir ? 'Directory' : formatSize(file.size)}</span>
+                            <span className="opacity-20">•</span>
+                            <span>{file.permissions}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="opacity-0 group-hover:opacity-100 flex gap-2 items-center transition-opacity">
+                         {(file.name.endsWith('.zip') || file.name.endsWith('.tar.gz')) && 
+                            <button onClick={(e) => { e.stopPropagation(); extractArchive(file.path); }} className="p-2.5 hover:bg-white/10 rounded-xl text-emerald-500 transition-all"><Archive className="w-4 h-4" /></button>}
+                         <button onClick={(e) => { e.stopPropagation(); setTag(file.path, 'Important'); }} className="p-2.5 hover:bg-white/10 rounded-xl text-zinc-500 hover:text-indigo-400 transition-all"><Tag className="w-4 h-4" /></button>
+                         <button onClick={(e) => { e.stopPropagation(); toggleFavorite(file.path); }} className={cn("p-2.5 rounded-xl transition-all", favorites.includes(file.path) ? "text-amber-500" : "text-zinc-500 hover:text-amber-500")}><Star className="w-4 h-4" /></button>
+                      </div>
+                    </motion.div>
                   </div>
-                  <div className={cn("flex items-center gap-3 text-[9px] font-black uppercase tracking-[0.2em]", isSelected ? "text-white/60" : "text-zinc-600")}>
-                    <span>{file.is_dir ? 'Directory' : formatSize(file.size)}</span>
-                    <span className="opacity-20">•</span>
-                    <span>{file.permissions}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="opacity-0 group-hover:opacity-100 flex gap-2 items-center transition-opacity">
-                 {(file.name.endsWith('.zip') || file.name.endsWith('.tar.gz')) && 
-                    <button onClick={(e) => { e.stopPropagation(); extractArchive(file.path); }} className="p-2.5 hover:bg-white/10 rounded-xl text-emerald-500 transition-all"><Archive className="w-4 h-4" /></button>}
-                 <button onClick={(e) => { e.stopPropagation(); setTag(file.path, 'Important'); }} className="p-2.5 hover:bg-white/10 rounded-xl text-zinc-500 hover:text-indigo-400 transition-all"><Tag className="w-4 h-4" /></button>
-                 <button onClick={(e) => { e.stopPropagation(); toggleFavorite(file.path); }} className={cn("p-2.5 rounded-xl transition-all", favorites.includes(file.path) ? "text-amber-500" : "text-zinc-500 hover:text-amber-500")}><Star className="w-4 h-4" /></button>
-              </div>
-            </motion.div>
-          );
-        })}
-    </div>
-  );
+                );
+              }}
+            </VirtualList>
+          )}
+        </AutoSizer>
+      </div>
+    );
+  };
 
   return (
     <div className={cn(
@@ -459,6 +485,7 @@ export default function MasterBrowser() {
                 { id: 'explorer', icon: LayoutGrid, label: 'Explorer' },
                 { id: 'recent', icon: Clock, label: 'Chronology' },
                 { id: 'favorites', icon: StarFilled, label: 'Anchors' },
+                { id: 'raw', icon: Database, label: 'Raw Probe' },
                 { id: 'network', icon: Globe, label: 'Nexus Scan' }
                 ].map(item => (
                 <button 
@@ -538,6 +565,7 @@ export default function MasterBrowser() {
             <AnimatePresence mode="wait">
               <motion.div key={view + (splitView ? 'split' : 'single')} initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -40 }} transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }} className="h-full">
                 {view === 'dashboard' && renderDashboard()}
+                {view === 'raw' && <RawDiskViewer />}
                 {view === 'explorer' && (
                     <div className={cn("grid gap-16 h-full", splitView ? "grid-cols-2" : "grid-cols-1")}>
                         <div className="flex flex-col gap-8">
@@ -640,7 +668,7 @@ export default function MasterBrowser() {
                                     onChange={val => setEditingFile(p => p ? {...p, content: val || ''} : null)}
                                     options={{
                                         minimap: { enabled: false }, fontSize: 15, fontFamily: 'JetBrains Mono, monospace',
-                                        padding: { top: 60, bottom: 60 },
+                                        padding: { top: 60, bottom: 60 }, 
                                         lineNumbers: "on", scrollbar: { vertical: 'hidden' }
                                     }}
                                 />
@@ -653,14 +681,6 @@ export default function MasterBrowser() {
           </div>
         </main>
       </div>
-
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; overflow: hidden; }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1f1f23; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
-      `}</style>
     </div>
   );
 }

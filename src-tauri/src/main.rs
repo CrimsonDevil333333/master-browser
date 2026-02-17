@@ -477,6 +477,30 @@ fn scan_local_network() -> Result<Vec<String>, String> {
     Ok(vec!["192.168.1.1 (Gateway)".to_string(), "192.168.1.15 (Current Device)".to_string()])
 }
 
+mod fs_parser;
+
+use fs_parser::{RawBlockDevice, Ext4SuperblockInfo, NtfsVolumeInfo, FatVolumeInfo};
+
+#[tauri::command]
+fn get_raw_devices() -> Result<Vec<RawBlockDevice>, String> {
+    fs_parser::list_raw_devices()
+}
+
+#[tauri::command]
+fn inspect_ext4_superblock(path: String) -> Result<Ext4SuperblockInfo, String> {
+    fs_parser::parse_ext4_superblock(&path)
+}
+
+#[tauri::command]
+fn inspect_ntfs_volume(path: String) -> Result<NtfsVolumeInfo, String> {
+    fs_parser::parse_ntfs_volume(&path)
+}
+
+#[tauri::command]
+fn inspect_fat_volume(path: String) -> Result<FatVolumeInfo, String> {
+    fs_parser::parse_fat_volume(&path)
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -501,7 +525,11 @@ fn main() {
             calculate_hash,
             get_image_thumbnail,
             run_terminal_command,
-            scan_local_network
+            scan_local_network,
+            get_raw_devices,
+            inspect_ext4_superblock,
+            inspect_ntfs_volume,
+            inspect_fat_volume
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

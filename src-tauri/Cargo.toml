@@ -25,11 +25,14 @@ flate2 = "1.0"
 sha2 = "0.10"
 md-5 = "0.10"
 base64 = "0.21"
+ntfs = "0.4"
+fatfs = "0.3"
+fscommon = "0.1"
 
 [dependencies.webkit2gtk]
 version = "0.18"
 default-features = false
-features = ["v2_4"]
+features = ["v2_12"]
 
 [build-dependencies]
 tauri-build = "1"

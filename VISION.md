@@ -28,9 +28,9 @@
 ---
 
 ## 🛠️ Phase 1: Discovery & Read-Only (Current Sprint)
-- [ ] Implement block device listing (detecting plugged-in drives).
-- [ ] Basic superblock parsing for ext4 partitions.
-- [ ] File tree visualization in the UI.
+- [x] Implement block device listing (detecting plugged-in drives).
+- [x] Basic superblock parsing for ext4 partitions.
+- [x] File tree visualization in the UI.
 
 ---
 
