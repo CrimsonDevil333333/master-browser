@@ -1,10 +1,13 @@
-<p align="center">
-  <img src="src-tauri/icons/128x128@2x.png" width="128" height="128" alt="Master Browser Logo" />
-</p>
+<div align="center">
+  <img src="src-tauri/icons/icon.png" width="160" height="160" alt="Master Browser Logo" />
+  <h1>🧭 Master Browser</h1>
+  <p><b>The Universal User-Space Filesystem Bridge</b></p>
+  <p><i>Bridge the gap between Windows, macOS, and Linux without kernel drivers.</i></p>
+</div>
 
-# 🧭 Master Browser: The Universal Filesystem Bridge
+---
 
-**Master Browser** is a high-performance, user-space filesystem explorer built with **Rust + Tauri**. It bridges the gap between Windows, macOS, and Linux by allowing direct access to filesystems without requiring kernel-level mounting.
+**Master Browser** is a high-performance filesystem explorer built with **Rust + Tauri**. It allows direct, sector-level access to filesystems like **Ext4, NTFS, Btrfs, XFS, and exFAT**, even on platforms where they aren't natively supported.
 
 ## 📸 Screenshots
 | Dashboard | Explorer | Raw Probe |
