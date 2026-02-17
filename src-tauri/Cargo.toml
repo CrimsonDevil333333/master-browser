@@ -31,7 +31,7 @@ fscommon = "0.1"
 once_cell = "1.19"
 ext4_rs = { git = "https://github.com/yuoo655/ext4_rs", branch = "master" }
 # Pin wry to 0.24.3 to avoid broken 0.24.11 on Linux (SettingsExt error)
-wry = "=0.24.3"
+wry = "=0.24.10"
 
 [build-dependencies]
 tauri-build = "1.5"
