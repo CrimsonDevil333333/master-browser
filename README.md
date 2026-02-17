@@ -1,6 +1,5 @@
 <div align="center">
-  <img src="src-tauri/icons/icon.png" width="160" height="160" alt="Master Browser Logo" />
-  <h1>🧭 Master Browser</h1>
+  <h1>Master Browser</h1>
   <p><b>Universal User-Space Filesystem Bridge (Tauri + Rust)</b></p>
   <p><i>Explore and operate across NTFS/FAT/ext-family style storage from one hardened desktop UI.</i></p>
 </div>
@@ -36,14 +35,6 @@ No mock data paths are used for core actions — operations are wired to real ba
 | Media Viewer |
 | :---: |
 | ![Media Viewer](docs/images/media-viewer.jpg) |
-
-### Legacy/Planned UI (from previous iterations)
-
-| Legacy Sidebar (Chronology/Anchors) | Legacy Nexus Scan |
-| :---: | :---: |
-| ![Legacy Sidebar](docs/images/sidebar-legacy.jpg) | ![Legacy Nexus Scan](docs/images/nexus-scan-legacy.jpg) |
-
-> Note: these legacy views are not fully wired in the current stable build yet.
 
 ---
 
