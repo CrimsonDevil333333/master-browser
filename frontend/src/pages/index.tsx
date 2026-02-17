@@ -80,7 +80,6 @@ export default function MasterBrowser() {
   const [files, setFiles] = useState<FileMetadata[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [, setStats] = useState<SystemStats | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [clipboard, setClipboard] = useState<{ paths: string[]; type: 'copy' | 'move' } | null>(null);
   const [activeFile, setActiveFile] = useState<{ path: string; content: string; originalContent: string; type: ViewerType } | null>(null);
@@ -98,6 +97,7 @@ export default function MasterBrowser() {
   const [anchors, setAnchors] = useState<string[]>([]);
   const [networkNodes, setNetworkNodes] = useState<string[]>([]);
   const [networkLoading, setNetworkLoading] = useState(false);
+  const [stats, setStats] = useState<SystemStats | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -501,39 +501,56 @@ export default function MasterBrowser() {
   };
 
   const renderDashboard = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-      {disks.map((disk) => (
-        <div
-          key={disk.mount_point}
-          onClick={() => {
-            setCurrentPath(disk.mount_point);
-            guardedSetView('explorer');
-          }}
-          className="p-10 rounded-[3rem] bg-zinc-900/40 border border-zinc-800 shadow-xl hover:border-indigo-500 cursor-pointer transition-all relative overflow-hidden group text-zinc-100"
-        >
-          <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:scale-125 transition-transform">
-            <HardDrive className="w-32 h-32" />
-          </div>
-          <div className="relative z-10 space-y-8">
-            <div className="p-4 bg-indigo-600 rounded-2xl text-white w-fit shadow-lg">
-              <HardDrive className="w-6 h-6" />
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {disks.map((disk) => (
+          <div
+            key={disk.mount_point}
+            onClick={() => {
+              setCurrentPath(disk.mount_point);
+              guardedSetView('explorer');
+            }}
+            className="p-10 rounded-[3rem] bg-zinc-900/40 border border-zinc-800 shadow-xl hover:border-indigo-500 cursor-pointer transition-all relative overflow-hidden group text-zinc-100"
+          >
+            <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:scale-125 transition-transform">
+              <HardDrive className="w-32 h-32" />
             </div>
-            <div>
-              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{disk.fs_type}</p>
-              <h3 className="text-xl font-black truncate">{disk.name || disk.mount_point}</h3>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-[10px] font-bold text-zinc-500">
-                <span>{formatSize(disk.available_space)} Free</span>
-                <span>{Math.round((1 - disk.available_space / disk.total_space) * 100)}%</span>
+            <div className="relative z-10 space-y-8">
+              <div className="p-4 bg-indigo-600 rounded-2xl text-white w-fit shadow-lg">
+                <HardDrive className="w-6 h-6" />
               </div>
-              <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-600" style={{ width: `${(1 - disk.available_space / disk.total_space) * 100}%` }} />
+              <div>
+                <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{disk.fs_type}</p>
+                <h3 className="text-xl font-black truncate">{disk.name || disk.mount_point}</h3>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-[10px] font-bold text-zinc-500">
+                  <span>{formatSize(disk.available_space)} Free</span>
+                  <span>{Math.round((1 - disk.available_space / disk.total_space) * 100)}%</span>
+                </div>
+                <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-indigo-600" style={{ width: `${(1 - disk.available_space / disk.total_space) * 100}%` }} />
+                </div>
               </div>
             </div>
           </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/40">
+          <p className="text-[10px] uppercase tracking-widest text-zinc-500 font-black">Chronology</p>
+          <p className="text-2xl font-black mt-1">{recentFiles.length}</p>
         </div>
-      ))}
+        <div className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/40">
+          <p className="text-[10px] uppercase tracking-widest text-zinc-500 font-black">Anchors</p>
+          <p className="text-2xl font-black mt-1">{anchors.length}</p>
+        </div>
+        <div className="p-5 rounded-2xl border border-zinc-800 bg-zinc-900/40">
+          <p className="text-[10px] uppercase tracking-widest text-zinc-500 font-black">Nexus Hosts</p>
+          <p className="text-2xl font-black mt-1">{networkNodes.length}</p>
+        </div>
+      </div>
     </div>
   );
 
@@ -598,6 +615,18 @@ export default function MasterBrowser() {
             </button>
           ))}
         </nav>
+
+        <div className="pt-6 border-t border-zinc-800 space-y-3">
+          <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-600 font-black">Telemetry</p>
+          <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800">
+            <div className="flex items-center justify-between text-[10px] text-zinc-400 font-black"><span>CPU</span><span>{Math.round(stats?.cpu_usage || 0)}%</span></div>
+            <div className="mt-2 h-1.5 rounded bg-zinc-800 overflow-hidden"><div className="h-full bg-amber-400" style={{ width: `${Math.min(100, Math.round(stats?.cpu_usage || 0))}%` }} /></div>
+          </div>
+          <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800">
+            <div className="flex items-center justify-between text-[10px] text-zinc-400 font-black"><span>RAM</span><span>{stats ? `${(stats.ram_used / 1024 / 1024 / 1024).toFixed(1)}G` : '0.0G'}</span></div>
+            <div className="mt-2 h-1.5 rounded bg-zinc-800 overflow-hidden"><div className="h-full bg-emerald-400" style={{ width: `${stats && stats.ram_total ? Math.min(100, Math.round((stats.ram_used / stats.ram_total) * 100)) : 0}%` }} /></div>
+          </div>
+        </div>
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#050505]">

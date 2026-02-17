@@ -188,6 +188,21 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
                         </div>
                     </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="p-4 rounded-2xl border border-zinc-700 bg-black/20">
+                        <p className="text-[10px] uppercase tracking-widest text-zinc-500 font-black">Raw Detect</p>
+                        <p className="text-xs mt-1 text-emerald-400 font-black">Supported</p>
+                      </div>
+                      <div className="p-4 rounded-2xl border border-zinc-700 bg-black/20">
+                        <p className="text-[10px] uppercase tracking-widest text-zinc-500 font-black">Cross-OS Browse</p>
+                        <p className="text-xs mt-1 text-amber-400 font-black">Mount bridge live / Raw tree in progress</p>
+                      </div>
+                      <div className="p-4 rounded-2xl border border-zinc-700 bg-black/20">
+                        <p className="text-[10px] uppercase tracking-widest text-zinc-500 font-black">Cross-OS Edit</p>
+                        <p className="text-xs mt-1 text-amber-400 font-black">Transactional write layer planned</p>
+                      </div>
+                    </div>
+
                     <div className="p-8 bg-indigo-500/5 rounded-[2rem] border border-indigo-500/10 flex items-center gap-6">
                       <ShieldAlert className="w-10 h-10 text-indigo-500 shrink-0" />
                       <div>
