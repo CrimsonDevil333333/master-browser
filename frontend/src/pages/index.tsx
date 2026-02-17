@@ -109,6 +109,7 @@ export default function MasterBrowser() {
   const [secondFiles, setSecondFiles] = useState<FileMetadata[]>([]);
 
   const [commandPalette, setCommandPalette] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState('');
   const [networkNodes, setNetworkNodes] = useState<string[]>([]);
   const [fileTags, setFileTags] = useState<Record<string, string>>({});
 
@@ -162,7 +163,6 @@ export default function MasterBrowser() {
     try { 
         const nav = await invoke<QuickNav>('get_quick_nav_paths');
         setQuickNav(nav);
-        // Default to home if no path set
         if (!currentPath && nav.home) setCurrentPath(nav.home);
     } catch (e) {}
   };
@@ -227,7 +227,6 @@ export default function MasterBrowser() {
   const navigateUp = (isSecond = false) => {
     const path = isSecond ? secondPath : currentPath;
     if (!path) return;
-    // Handle Windows roots correctly
     if (path.length <= 3 && (path.endsWith(':\\') || path === '/')) return;
     
     const parts = path.split(/[/\\]/).filter(Boolean);
@@ -236,7 +235,7 @@ export default function MasterBrowser() {
     let parent = '';
     if (path.includes(':\\')) {
         parent = parts.slice(0, -1).join('\\');
-        if (!parent.includes(':')) parent += parts[0] + '\\';
+        if (!parent.includes(':')) parent = parts[0] + '\\';
         else if (!parent.endsWith('\\')) parent += '\\';
     } else {
         parent = '/' + parts.slice(0, -1).join('/');
@@ -274,7 +273,7 @@ export default function MasterBrowser() {
     const type = getFileType(quickLookFile.name);
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] flex items-center justify-center p-20 bg-black/60 backdrop-blur-2xl">
-        <motion.div layoutId={`file-${quickLookFile.path}`} className="w-full max-w-5xl h-full bg-zinc-900/80 dark:bg-zinc-900/80 bg-white/90 rounded-[4rem] border border-zinc-200 dark:border-white/10 shadow-2xl overflow-hidden flex flex-col">
+        <motion.div layoutId={`file-${quickLookFile.path}`} className="w-full max-w-5xl h-full bg-white dark:bg-zinc-900/80 rounded-[4rem] border border-zinc-200 dark:border-white/10 shadow-2xl overflow-hidden flex flex-col">
           <div className="p-8 border-b border-zinc-100 dark:border-white/5 flex justify-between items-center bg-zinc-50/40 dark:bg-zinc-950/40">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-indigo-500/20 rounded-2xl text-indigo-600 dark:text-indigo-400"><FileSearch className="w-6 h-6" /></div>
@@ -283,7 +282,7 @@ export default function MasterBrowser() {
                 <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-widest">{quickLookFile.path}</p>
               </div>
             </div>
-            <button onClick={() => setQuickLookFile(null)} className="p-4 bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 rounded-3xl transition-colors"><X className="w-6 h-6" /></button>
+            <button onClick={() => setQuickLookFile(null)} className="p-4 bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 rounded-3xl transition-colors"><X className="w-6 h-6 text-zinc-900 dark:text-zinc-100" /></button>
           </div>
           <div className="flex-1 overflow-auto p-12 flex items-center justify-center">
             {type === 'image' ? <img src={`https://asset.localhost/${quickLookFile.path}`} className="max-w-full max-h-full rounded-3xl shadow-2xl" /> :
@@ -295,7 +294,7 @@ export default function MasterBrowser() {
           </div>
           <div className="p-8 bg-zinc-50/40 dark:bg-zinc-950/40 border-t border-zinc-100 dark:border-white/5 flex gap-4">
              <button onClick={() => { openFile(quickLookFile); setQuickLookFile(null); }} className="px-8 py-4 bg-indigo-600 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-3 text-white"><Edit3 className="w-4 h-4" /> Open in Editor</button>
-             <button className="px-8 py-4 bg-zinc-200 dark:bg-white/5 rounded-2xl font-black text-xs uppercase tracking-widest">Properties</button>
+             <button className="px-8 py-4 bg-zinc-200 dark:bg-white/5 rounded-2xl font-black text-xs uppercase tracking-widest text-zinc-900 dark:text-zinc-100">Properties</button>
           </div>
         </motion.div>
       </motion.div>
@@ -467,7 +466,7 @@ export default function MasterBrowser() {
   const renderSettings = () => (
     <div className="max-w-4xl space-y-12">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="p-10 rounded-[3rem] bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 space-y-8">
+            <div className="p-10 rounded-[3rem] bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 space-y-8 shadow-xl dark:shadow-none">
                 <div className="flex items-center gap-6">
                     <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-2xl text-zinc-900 dark:text-zinc-100"><User className="w-6 h-6" /></div>
                     <div>
@@ -485,7 +484,7 @@ export default function MasterBrowser() {
                 </div>
             </div>
 
-            <div className="p-10 rounded-[3rem] bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 space-y-8">
+            <div className="p-10 rounded-[3rem] bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800 space-y-8 shadow-xl dark:shadow-none">
                 <div className="flex items-center gap-6">
                     <div className="p-4 bg-zinc-100 dark:bg-zinc-800 rounded-2xl text-zinc-900 dark:text-zinc-100"><Settings2 className="w-6 h-6" /></div>
                     <div>
@@ -546,15 +545,26 @@ export default function MasterBrowser() {
                 <motion.div initial={{ y: -20 }} animate={{ y: 0 }} className="w-full max-w-2xl bg-white dark:bg-zinc-900/90 rounded-[2.5rem] border border-zinc-200 dark:border-white/10 shadow-2xl overflow-hidden shadow-indigo-500/10">
                     <div className="p-8 flex items-center gap-6 border-b border-zinc-100 dark:border-white/5">
                         <CommandIcon className="w-6 h-6 text-indigo-500" />
-                        <input autoFocus placeholder="EXECUTE COMMAND OR SEARCH DISK..." className="flex-1 bg-transparent border-none outline-none text-xl font-black tracking-tight placeholder:text-zinc-300 dark:placeholder:text-zinc-700 text-zinc-900 dark:text-zinc-100" />
+                        <input 
+                            autoFocus 
+                            placeholder="EXECUTE COMMAND OR SEARCH DISK..." 
+                            value={paletteQuery}
+                            onChange={(e) => setPaletteQuery(e.target.value)}
+                            className="flex-1 bg-transparent border-none outline-none text-xl font-black tracking-tight placeholder:text-zinc-300 dark:placeholder:text-zinc-700 text-zinc-900 dark:text-zinc-100" 
+                        />
                     </div>
                     <div className="p-4 max-h-96 overflow-auto">
                         <p className="px-6 py-4 text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Sovereign Suggestions</p>
                         <div className="grid gap-1">
-                            {['Navigate to Home', 'Search Documents', 'Extract Recent Archive', 'Check for Updates'].map(cmd => (
-                                <button key={cmd} className="flex items-center gap-4 w-full px-6 py-4 hover:bg-zinc-100 dark:hover:bg-white/5 rounded-2xl transition-all text-sm font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white group">
+                            {[
+                                { id: 'home', label: 'Navigate to Home', action: () => { if (quickNav) setCurrentPath(quickNav.home); setView('explorer'); setCommandPalette(false); } },
+                                { id: 'update', label: 'Check for Updates', action: () => { invoke('check_for_updates'); setCommandPalette(false); } },
+                                { id: 'raw', label: 'Raw Partition Probe', action: () => { setView('raw'); setCommandPalette(false); } },
+                                { id: 'nexus', label: 'Nexus Network Scan', action: () => { setView('network'); setCommandPalette(false); } }
+                            ].filter(c => c.label.toLowerCase().includes(paletteQuery.toLowerCase())).map(cmd => (
+                                <button key={cmd.id} onClick={cmd.action} className="flex items-center gap-4 w-full px-6 py-4 hover:bg-zinc-100 dark:hover:bg-white/5 rounded-2xl transition-all text-sm font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white group">
                                     <div className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-xl group-hover:bg-indigo-600 transition-colors"><Zap className="w-4 h-4" /></div>
-                                    {cmd}
+                                    {cmd.label}
                                 </button>
                             ))}
                         </div>
@@ -575,7 +585,7 @@ export default function MasterBrowser() {
             </div>
             <div className="flex flex-col">
                 <h1 className="text-2xl font-black tracking-tighter leading-none text-zinc-900 dark:text-zinc-100">MASTER</h1>
-                <span className="text-[8px] font-black text-indigo-500 uppercase tracking-[0.4em] mt-1">Sovereign v0.2.14</span>
+                <span className="text-[8px] font-black text-indigo-500 uppercase tracking-[0.4em] mt-1 text-zinc-400 dark:text-indigo-500">Sovereign v0.2.14</span>
             </div>
           </div>
 
@@ -607,7 +617,7 @@ export default function MasterBrowser() {
             <div className="space-y-6 pt-4 border-t border-zinc-100 dark:border-zinc-800/50">
                 <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest px-4">Telemetry</p>
                 <div className="grid gap-4">
-                    <div className="p-5 bg-zinc-50 dark:bg-zinc-900/40 rounded-3xl border border-zinc-100 dark:border-white/5 space-y-3 shadow-sm dark:shadow-none">
+                    <div className="p-5 bg-zinc-50 dark:bg-zinc-900/40 rounded-3xl border border-zinc-100 dark:border-white/5 space-y-3 shadow-sm dark:shadow-none text-zinc-900 dark:text-zinc-100">
                         <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
                             <span className="flex items-center gap-2"><Cpu className="w-3 h-3" /> Core Load</span>
                             <span>{stats?.cpu_usage.toFixed(0) || 0}%</span>
@@ -616,7 +626,7 @@ export default function MasterBrowser() {
                             <motion.div animate={{ width: `${stats?.cpu_usage || 0}%` }} className="h-full bg-amber-500" />
                         </div>
                     </div>
-                    <div className="p-5 bg-zinc-50 dark:bg-zinc-900/40 rounded-3xl border border-zinc-100 dark:border-white/5 space-y-3 shadow-sm dark:shadow-none">
+                    <div className="p-5 bg-zinc-50 dark:bg-zinc-900/40 rounded-3xl border border-zinc-100 dark:border-white/5 space-y-3 shadow-sm dark:shadow-none text-zinc-900 dark:text-zinc-100">
                         <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
                             <span className="flex items-center gap-2"><Ram className="w-3 h-3" /> Memory</span>
                             <span>{stats ? (stats.ram_used / 1e9).toFixed(1) : 0}G</span>
@@ -639,7 +649,7 @@ export default function MasterBrowser() {
         </aside>
 
         <main className="flex-1 flex flex-col h-full min-w-0 bg-white dark:bg-[#050505]">
-          <header className="px-16 py-12 flex items-center justify-between relative z-40 border-b border-zinc-50 dark:border-none shadow-sm dark:shadow-none">
+          <header className="px-16 py-12 flex items-center justify-between relative z-40 border-b border-zinc-50 dark:border-none shadow-sm dark:shadow-none bg-white dark:bg-[#050505]">
             <div className="flex flex-col gap-1">
               <motion.h2 layoutId="view-title" className="text-5xl font-black capitalize tracking-tighter text-zinc-900 dark:text-zinc-100">{view}</motion.h2>
               <div className="flex items-center gap-3">
@@ -656,7 +666,7 @@ export default function MasterBrowser() {
                         className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] pl-16 pr-8 py-5 text-xs font-black tracking-[0.2em] outline-none focus:ring-4 focus:ring-indigo-500/10 w-80 transition-all text-zinc-900 dark:text-zinc-100"
                     />
                 </div>
-                <div className="flex items-center gap-4 bg-zinc-50 dark:bg-zinc-900/50 px-8 py-5 rounded-[2rem] border border-zinc-200 dark:border-zinc-800">
+                <div className="flex items-center gap-4 bg-zinc-50 dark:bg-zinc-900/50 px-8 py-5 rounded-[2rem] border border-zinc-200 dark:border-zinc-800 shadow-sm dark:shadow-none">
                     <Activity className={cn("w-5 h-5", loading ? "text-amber-500 animate-spin" : "text-emerald-500")} />
                     <span className="text-[10px] font-black tracking-widest text-zinc-400 dark:text-zinc-500">{loading ? 'LINKING...' : 'SYNCED'}</span>
                 </div>
@@ -681,7 +691,7 @@ export default function MasterBrowser() {
                                     </div>
                                 </div>
                                 <div className="flex gap-2">
-                                    <button onClick={() => setSplitView(!splitView)} className={cn("p-4 rounded-2xl border transition-all", splitView ? "bg-indigo-600 border-indigo-600 text-white" : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-500 shadow-sm dark:shadow-none")}><Columns className="w-5 h-5" /></button>
+                                    <button onClick={() => setSplitView(!splitView)} className={cn("p-4 rounded-2xl border transition-all", splitView ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-500 shadow-sm dark:shadow-none")}><Columns className="w-5 h-5" /></button>
                                     <button className="p-4 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-2xl text-zinc-400 dark:text-zinc-500 hover:text-red-500 transition-all shadow-sm dark:shadow-none"><Trash2 className="w-5 h-5" /></button>
                                 </div>
                             </div>
@@ -714,7 +724,10 @@ export default function MasterBrowser() {
                                 <h2 className="text-4xl font-black tracking-tighter">Nexus Probe</h2>
                                 <p className="text-xs font-black uppercase tracking-[0.3em] opacity-60 mt-2">Scanning local neural network for nodes</p>
                             </div>
-                            <button onClick={async () => setNetworkNodes(await invoke('scan_local_network'))} className="p-6 bg-white/20 hover:bg-white/30 rounded-[2.5rem] transition-all flex items-center gap-4">
+                            <button onClick={async () => {
+                                const nodes = await invoke<string[]>('scan_local_network');
+                                setNetworkNodes(nodes);
+                            }} className="p-6 bg-white/20 hover:bg-white/30 rounded-[2.5rem] transition-all flex items-center gap-4">
                                 <RefreshCw className="w-6 h-6" /> <span className="font-black text-sm uppercase tracking-widest">Execute Scan</span>
                             </button>
                         </div>
@@ -735,14 +748,14 @@ export default function MasterBrowser() {
                     <div className="h-full flex flex-col gap-8">
                         <div className="flex items-center justify-between p-6 bg-zinc-50 dark:bg-zinc-900/50 rounded-[2.5rem] border border-zinc-200 dark:border-zinc-800 shadow-sm dark:shadow-none">
                             <div className="flex items-center gap-6">
-                                <button onClick={() => setView('explorer')} className="p-4 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-2xl transition-colors"><ArrowLeft className="w-5 h-5" /></button>
+                                <button onClick={() => setView('explorer')} className="p-4 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-2xl transition-colors text-zinc-900 dark:text-zinc-100"><ArrowLeft className="w-5 h-5" /></button>
                                 <div>
                                     <p className="text-[9px] font-black text-zinc-400 dark:text-zinc-600 uppercase tracking-widest leading-none mb-1">Active File</p>
                                     <span className="text-xs font-mono text-indigo-600 dark:text-indigo-400">{editingFile?.path}</span>
                                 </div>
                             </div>
                             <div className="flex gap-4">
-                                <button className="px-8 py-4 bg-zinc-200 dark:bg-zinc-800 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-all">Download</button>
+                                <button className="px-8 py-4 bg-zinc-200 dark:bg-zinc-800 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-zinc-300 dark:hover:bg-zinc-700 transition-all text-zinc-900 dark:text-zinc-100">Download</button>
                                 <button onClick={async () => {
                                     await invoke('write_file_content', { path: editingFile?.path, content: editingFile?.content });
                                     toast.success('Sovereign State Saved');
