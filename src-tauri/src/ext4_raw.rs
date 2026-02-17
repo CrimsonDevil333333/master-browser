@@ -1,10 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fs::File;
+use std::io::Read;
 use std::path::Path;
 use crate::FileMetadata;
-
-// We'll use the ext4 crate to parse the raw partition
-// Note: Exact API usage depends on ext4 crate specifics, adapting standard patterns here.
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Ext4RawCapability {
@@ -42,22 +40,49 @@ pub fn capability_probe(partition_path: &str, is_ext4_signature: bool, is_window
 }
 
 pub fn list_directory_raw(partition_path: &str, relative_path: &str) -> Result<Vec<FileMetadata>, String> {
-    // This is where we wire up ext4_rs.
-    // Since we just added the dependency, we'll try to use a standard pattern.
-    // If compilation fails due to API mismatch, we'll fix it in the next step.
+    let file = File::open(partition_path).map_err(|e| format!("Failed to open partition: {}", e))?;
+    let mut vol = ext4::SuperBlock::new(file).map_err(|e| format!("Failed to load Ext4 superblock: {:?}", e))?;
     
-    // For safety in this immediate step (to ensure build passes), I'm returning an empty real-structure result
-    // effectively enabling the "View" but showing it empty until I confirm the struct names from the crate.
+    let root = vol.root().map_err(|e| format!("Failed to get root inode: {:?}", e))?;
     
-    // In a real engine:
-    // let file = File::open(partition_path).map_err(|e| e.to_string())?;
-    // let mut vol = ext4::Volume::new(file).map_err(|e| format!("{:?}", e))?;
-    // ... traverse ...
+    let target_inode = if relative_path.is_empty() || relative_path == "/" {
+        root
+    } else {
+        vol.walk(&root, relative_path).map_err(|e| format!("Path not found '{}': {:?}", relative_path, e))?
+    };
+
+    let mut entries = Vec::new();
     
-    Ok(Vec::new())
+    // Depending on crate API, we might iterate dir entries
+    // Using typical iterator pattern for ext4 crate
+    if let Ok(iter) = vol.read_dir(&target_inode) {
+        for entry in iter {
+            if let Ok(e) = entry {
+                entries.push(FileMetadata {
+                    name: e.name.clone(),
+                    size: e.inode.size as u64,
+                    is_dir: e.file_type == ext4::FileType::Directory,
+                    last_modified: e.inode.mtime as u64,
+                    path: format!("{}", e.name), // Relative name for now, UI handles context
+                    permissions: format!("{:o}", e.inode.mode),
+                });
+            }
+        }
+    }
+    
+    Ok(entries)
 }
 
 pub fn read_file_raw(partition_path: &str, relative_path: &str) -> Result<Vec<u8>, String> {
-    // Placeholder for userspace read
-    Err("Userspace read pending Ext4 crate compilation verification".to_string())
+    let file = File::open(partition_path).map_err(|e| format!("Failed to open partition: {}", e))?;
+    let mut vol = ext4::SuperBlock::new(file).map_err(|e| format!("Failed to load Ext4 superblock: {:?}", e))?;
+    
+    let root = vol.root().map_err(|e| format!("Failed to get root inode: {:?}", e))?;
+    let target_inode = vol.walk(&root, relative_path).map_err(|e| format!("Path not found '{}': {:?}", relative_path, e))?;
+    
+    let mut buffer = Vec::new();
+    vol.open(&target_inode).map_err(|e| format!("Failed to open inode: {:?}", e))? 
+        .read_to_end(&mut buffer).map_err(|e| format!("Failed to read content: {}", e))?;
+        
+    Ok(buffer)
 }
