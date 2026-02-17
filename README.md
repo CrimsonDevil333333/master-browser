@@ -10,8 +10,8 @@
 | ![Dashboard](docs/images/dashboard.png) | ![Explorer](docs/images/explorer.png) | ![Raw Probe](docs/images/raw_probe.png) |
 
 ## 🚀 Key Features
-- **Universal Bridge**: Read/Write Ext4, NTFS, and FAT (12/16/32) partitions natively.
-- **User-Space Drivers**: Bypasses the OS kernel to "see" unmounted partitions via direct sector-level probing.
+- **Universal Bridge**: Read/Write Ext4, XFS, Btrfs, NTFS, and FAT (12/16/32) / exFAT partitions natively.
+- **User-Space Drivers**: Bypasses the OS kernel to "see" unmounted partitions (Windows disks on Mac, Linux disks on Windows, etc) via direct sector-level probing.
 - **60 FPS Performance**: Virtualized file lists handle thousands of files with zero lag.
 - **Shadow Dark Interface**: Modern, sleek UI with fluid Framer Motion transitions.
 - **Specialized Viewers**: Deep inspection for CSV, JSON, and Code files.
