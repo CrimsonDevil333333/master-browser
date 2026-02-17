@@ -760,8 +760,10 @@ fn scan_local_network() -> Result<Vec<String>, String> {
 }
 
 mod fs_parser;
+mod ext4_raw;
 
 use fs_parser::{RawBlockDevice, FSInspectorInfo};
+use ext4_raw::Ext4RawCapability;
 
 #[tauri::command]
 fn get_raw_devices() -> Result<Vec<RawBlockDevice>, String> {
@@ -771,6 +773,13 @@ fn get_raw_devices() -> Result<Vec<RawBlockDevice>, String> {
 #[tauri::command]
 fn inspect_partition_details(path: String) -> Result<FSInspectorInfo, String> {
     fs_parser::inspect_partition(&path)
+}
+
+#[tauri::command]
+fn ext4_raw_capability(path: String) -> Result<Ext4RawCapability, String> {
+    let info = fs_parser::inspect_partition(&path)?;
+    let is_ext4 = info.fs_type.eq_ignore_ascii_case("ext4");
+    Ok(ext4_raw::capability_probe(&path, is_ext4, cfg!(target_os = "windows")))
 }
 
 fn main() {
@@ -809,7 +818,8 @@ fn main() {
             write_partition_file,
             scan_local_network,
             get_raw_devices,
-            inspect_partition_details
+            inspect_partition_details,
+            ext4_raw_capability
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -43,6 +43,14 @@ interface RootEntry {
   is_dir: boolean;
   size: number;
 }
+
+interface Ext4RawCapability {
+  partition_path: string;
+  supported_now: boolean;
+  mode: string;
+  details: string;
+}
+
 export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void; onOpenVirtualFile?: (payload: { partitionPath: string; relativePath: string; content: string }) => void }> = ({ onOpenPath, onOpenVirtualFile }) => {
   const [devices, setDevices] = useState<RawBlockDevice[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,6 +61,7 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void; onOp
   const [rootLoading, setRootLoading] = useState(false);
   const [currentRelativePath, setCurrentRelativePath] = useState('');
   const [filePreview, setFilePreview] = useState<{ name: string; content: string } | null>(null);
+  const [ext4Capability, setExt4Capability] = useState<Ext4RawCapability | null>(null);
 
   const fetchDevices = async () => {
     setLoading(true);
@@ -71,12 +80,14 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void; onOp
 
   const inspectPartition = async (path: string) => {
     try {
-      const [res, plan] = await Promise.all([
+      const [res, plan, cap] = await Promise.all([
         invoke<FSInfo>('inspect_partition_details', { path }),
         invoke<PartitionAccessPlan>('get_partition_access_plan', { path }),
+        invoke<Ext4RawCapability>('ext4_raw_capability', { path }).catch(() => null as any),
       ]);
       setFsInfo(res);
       setAccessPlan(plan);
+      setExt4Capability(cap);
       setRootEntries([]);
       setCurrentRelativePath('');
       setFilePreview(null);
@@ -84,6 +95,7 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void; onOp
     } catch (e) {
       setFsInfo(null);
       setAccessPlan(null);
+      setExt4Capability(null);
       setRootEntries([]);
       toast.error('Unknown filesystem or access denied');
     }
@@ -269,6 +281,13 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void; onOp
                         <p className="text-xs mt-1 text-amber-400 font-black">Transactional write layer planned</p>
                       </div>
                     </div>
+
+                    {ext4Capability && fsInfo.fs_type.toLowerCase() === 'ext4' && (
+                      <div className="p-4 rounded-2xl border border-indigo-500/30 bg-indigo-500/10">
+                        <p className="text-[10px] uppercase tracking-widest text-indigo-300 font-black">Ext4 Adapter Status</p>
+                        <p className="text-xs mt-1 text-zinc-300 font-medium">{ext4Capability.details}</p>
+                      </div>
+                    )}
 
                     <div className="p-8 bg-indigo-500/5 rounded-[2rem] border border-indigo-500/10 flex items-center gap-6">
                       <ShieldAlert className="w-10 h-10 text-indigo-500 shrink-0" />
