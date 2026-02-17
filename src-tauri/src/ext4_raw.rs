@@ -27,20 +27,31 @@ impl Disk {
 
 impl BlockDevice for Disk {
     fn read_offset(&self, offset: usize) -> Vec<u8> {
-        let mut file = self.file.lock().unwrap();
-        file.seek(SeekFrom::Start(offset as u64)).unwrap();
-        let mut buf = vec![0u8; 4096]; // Default block size assumption, adjusted by ext4 lib internally usually
-        // Note: ext4_rs example reads BLOCK_SIZE. We might need to handle variable sizes or let the lib ask.
-        // The trait signature in README returns Vec<u8>, implying it reads *a block*.
-        // Assuming 4096 for now.
+        // SAFEGUARD: Handle errors gracefully instead of panicking the whole app
+        let mut file = match self.file.lock() {
+            Ok(guard) => guard,
+            Err(_) => return vec![0u8; 4096], // Return empty block on mutex poison
+        };
+        
+        if file.seek(SeekFrom::Start(offset as u64)).is_err() {
+            return vec![0u8; 4096]; // Return empty on seek fail
+        }
+
+        let mut buf = vec![0u8; 4096]; 
+        // If read fails, we just return whatever we have (zeros) rather than crashing
         let _ = file.read_exact(&mut buf);
         buf
     }
 
     fn write_offset(&self, offset: usize, data: &[u8]) {
-        let mut file = self.file.lock().unwrap();
-        file.seek(SeekFrom::Start(offset as u64)).unwrap();
-        file.write_all(data).unwrap();
+        let mut file = match self.file.lock() {
+            Ok(guard) => guard,
+            Err(_) => return,
+        };
+        
+        if file.seek(SeekFrom::Start(offset as u64)).is_ok() {
+            let _ = file.write_all(data);
+        }
     }
 }
 

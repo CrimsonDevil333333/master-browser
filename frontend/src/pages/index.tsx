@@ -30,6 +30,7 @@ import {
   Clock3,
   Star,
   Globe,
+  RefreshCw,
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { RawDiskViewer } from '../components/RawDiskViewer';
@@ -682,6 +683,10 @@ export default function MasterBrowser() {
                     </button>
                     <input className="flex-1 bg-transparent border-none outline-none font-mono text-sm font-black" value={pathInput} onChange={(e) => setPathInput(e.target.value)} />
                     <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => fetchDirectory(currentPath)} className="p-2 text-zinc-400 hover:text-indigo-500" title="Refresh">
+                        <RefreshCw className="w-4 h-4" />
+                      </button>
+                      <div className="w-px h-4 bg-zinc-800 mx-1" />
                       <button type="button" onClick={createNewFile} className="p-2 text-zinc-400 hover:text-emerald-500" title="New file">
                         <FilePlus2 className="w-4 h-4" />
                       </button>

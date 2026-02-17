@@ -744,55 +744,59 @@ fn get_partition_mount_path(path: String) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-fn scan_local_network() -> Result<Vec<String>, String> {
-    #[cfg(target_os = "windows")]
-    {
-        let output = Command::new("arp")
-            .arg("-a")
-            .output()
-            .map_err(|e| format!("failed to run arp: {}", e))?;
-        let txt = String::from_utf8_lossy(&output.stdout);
-        let mut hosts = Vec::new();
-        for line in txt.lines() {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 && parts[0].chars().filter(|c| *c == '.').count() == 3 {
-                hosts.push(format!("{} {}", parts[0], parts[1]));
-            }
-        }
-        hosts.sort();
-        hosts.dedup();
-        return Ok(hosts);
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let mut hosts: Vec<String> = Vec::new();
-
-        if let Ok(output) = Command::new("ip").args(["neigh"]).output() {
+async fn scan_local_network() -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(target_os = "windows")]
+        {
+            let output = Command::new("arp")
+                .arg("-a")
+                .output()
+                .map_err(|e| format!("failed to run arp: {}", e))?;
             let txt = String::from_utf8_lossy(&output.stdout);
+            let mut hosts = Vec::new();
             for line in txt.lines() {
                 let parts: Vec<&str> = line.split_whitespace().collect();
-                if !parts.is_empty() && parts[0].chars().filter(|c| *c == '.').count() == 3 {
-                    hosts.push(line.to_string());
+                if parts.len() >= 2 && parts[0].chars().filter(|c| *c == '.').count() == 3 {
+                    hosts.push(format!("{} {}", parts[0], parts[1]));
                 }
             }
+            hosts.sort();
+            hosts.dedup();
+            return Ok(hosts);
         }
 
-        if hosts.is_empty() {
-            if let Ok(output) = Command::new("arp").arg("-a").output() {
+        #[cfg(not(target_os = "windows"))]
+        {
+            let mut hosts: Vec<String> = Vec::new();
+
+            if let Ok(output) = Command::new("ip").args(["neigh"]).output() {
                 let txt = String::from_utf8_lossy(&output.stdout);
                 for line in txt.lines() {
-                    if line.contains("(") && line.contains(")") {
-                        hosts.push(line.trim().to_string());
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if !parts.is_empty() && parts[0].chars().filter(|c| *c == '.').count() == 3 {
+                        hosts.push(line.to_string());
                     }
                 }
             }
-        }
 
-        hosts.sort();
-        hosts.dedup();
-        Ok(hosts)
-    }
+            if hosts.is_empty() {
+                if let Ok(output) = Command::new("arp").arg("-a").output() {
+                    let txt = String::from_utf8_lossy(&output.stdout);
+                    for line in txt.lines() {
+                        if line.contains("(") && line.contains(")") {
+                            hosts.push(line.trim().to_string());
+                        }
+                    }
+                }
+            }
+
+            hosts.sort();
+            hosts.dedup();
+            Ok(hosts)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 mod fs_parser;
