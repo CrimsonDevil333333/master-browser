@@ -8,7 +8,7 @@
   },
   "package": {
     "productName": "Master Browser",
-    "version": "0.1.8"
+    "version": "0.2.14"
   },
   "tauri": {
     "allowlist": {
@@ -43,8 +43,8 @@
         "title": "Master Browser",
         "width": 1200,
         "height": 800,
-        "decorations": false,
-        "transparent": true,
+        "decorations": true,
+        "transparent": false,
         "fileDropEnabled": true
       }
     ]

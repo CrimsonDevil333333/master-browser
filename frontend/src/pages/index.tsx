@@ -518,7 +518,7 @@ export default function MasterBrowser() {
             <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-500 px-4">System Metadata</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 {[
-                    { label: 'Release', value: 'v0.2.12' },
+                    { label: 'Release', value: 'v0.2.14' },
                     { label: 'Codename', value: 'Sovereign' },
                     { label: 'Kernel', value: 'User-Space' },
                     { label: 'Stability', value: 'Alpha' }
@@ -575,7 +575,7 @@ export default function MasterBrowser() {
             </div>
             <div className="flex flex-col">
                 <h1 className="text-2xl font-black tracking-tighter leading-none text-zinc-900 dark:text-zinc-100">MASTER</h1>
-                <span className="text-[8px] font-black text-indigo-500 uppercase tracking-[0.4em] mt-1">Sovereign v0.2.12</span>
+                <span className="text-[8px] font-black text-indigo-500 uppercase tracking-[0.4em] mt-1">Sovereign v0.2.14</span>
             </div>
           </div>
 
