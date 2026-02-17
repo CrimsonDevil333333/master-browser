@@ -638,48 +638,50 @@ fn get_partition_access_plan(path: String) -> Result<PartitionAccessPlan, String
     }
 }
 
-#[tauri::command]
-fn list_partition_root_entries(path: String) -> Result<Vec<FileMetadata>, String> {
+fn resolve_partition_browse_base(path: &str) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         let _ = path;
-        Err("Mounted partition root listing from raw path is not available on Windows yet (userspace reader pending).".to_string())
+        Err("Mounted partition browsing from raw path is not available on Windows yet (userspace reader pending).".to_string())
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        let mount_point = linux_mount_info(&path)
+        linux_mount_info(path)
             .map(|(mp, _)| mp)
             .filter(|s| !s.is_empty())
-            .ok_or("Partition is not mounted; raw tree reader pending.".to_string())?;
-
-        list_directory(mount_point)
+            .ok_or("Partition is not mounted; raw tree reader pending.".to_string())
     }
 }
 
 #[tauri::command]
+fn list_partition_root_entries(path: String) -> Result<Vec<FileMetadata>, String> {
+    let mount_point = resolve_partition_browse_base(&path)?;
+    list_directory(mount_point)
+}
+
+#[tauri::command]
+fn list_partition_entries(path: String, relative_path: String) -> Result<Vec<FileMetadata>, String> {
+    let mount_point = resolve_partition_browse_base(&path)?;
+    let rel = relative_path.trim_start_matches('/').trim_start_matches('\\');
+    let target = if rel.is_empty() {
+        PathBuf::from(mount_point)
+    } else {
+        Path::new(&mount_point).join(rel)
+    };
+    list_directory(target.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn read_partition_file_preview(path: String, relative_path: String, limit: usize) -> Result<String, String> {
-    #[cfg(target_os = "windows")]
-    {
-        let _ = (path, relative_path, limit);
-        Err("Raw file preview on unmounted Windows partitions is pending userspace reader implementation.".to_string())
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let mount_point = linux_mount_info(&path)
-            .map(|(mp, _)| mp)
-            .filter(|s| !s.is_empty())
-            .ok_or("Partition is not mounted; raw file preview pending userspace reader.".to_string())?;
-
-        let rel = relative_path.trim_start_matches('/').trim_start_matches('\\');
-        let target = Path::new(&mount_point).join(rel);
-        let mut file = File::open(&target).map_err(|e| format!("{}: {}", target.to_string_lossy(), e))?;
-        let mut buf = vec![0u8; limit.min(1024 * 1024)];
-        let n = file.read(&mut buf).map_err(|e| e.to_string())?;
-        let s = String::from_utf8_lossy(&buf[..n]).to_string();
-        Ok(s)
-    }
+    let mount_point = resolve_partition_browse_base(&path)?;
+    let rel = relative_path.trim_start_matches('/').trim_start_matches('\\');
+    let target = Path::new(&mount_point).join(rel);
+    let mut file = File::open(&target).map_err(|e| format!("{}: {}", target.to_string_lossy(), e))?;
+    let mut buf = vec![0u8; limit.min(1024 * 1024)];
+    let n = file.read(&mut buf).map_err(|e| e.to_string())?;
+    let s = String::from_utf8_lossy(&buf[..n]).to_string();
+    Ok(s)
 }
 
 #[tauri::command]
@@ -793,6 +795,7 @@ fn main() {
             get_partition_access_plan,
             get_partition_mount_path,
             list_partition_root_entries,
+            list_partition_entries,
             read_partition_file_preview,
             scan_local_network,
             get_raw_devices,

@@ -51,6 +51,7 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
   const [accessPlan, setAccessPlan] = useState<PartitionAccessPlan | null>(null);
   const [rootEntries, setRootEntries] = useState<RootEntry[]>([]);
   const [rootLoading, setRootLoading] = useState(false);
+  const [currentRelativePath, setCurrentRelativePath] = useState('');
   const [filePreview, setFilePreview] = useState<{ name: string; content: string } | null>(null);
 
   const fetchDevices = async () => {
@@ -77,6 +78,7 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
       setFsInfo(res);
       setAccessPlan(plan);
       setRootEntries([]);
+      setCurrentRelativePath('');
       setFilePreview(null);
       toast.success(`${res.fs_type} Signature Detected`);
     } catch (e) {
@@ -87,14 +89,22 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
     }
   };
 
-  const loadRootEntries = async () => {
+  const normalizeRelative = (entryPath: string) => {
+    const mount = accessPlan?.mount_point || '';
+    if (!mount) return entryPath;
+    const rel = entryPath.startsWith(mount) ? entryPath.slice(mount.length) : entryPath;
+    return rel.replace(/^[/\\]+/, '');
+  };
+
+  const loadEntries = async (relativePath = '') => {
     if (!selectedPart) return;
     setRootLoading(true);
     try {
-      const entries = await invoke<RootEntry[]>('list_partition_root_entries', { path: selectedPart.path });
-      setRootEntries(entries.slice(0, 40));
+      const entries = await invoke<RootEntry[]>('list_partition_entries', { path: selectedPart.path, relativePath });
+      setRootEntries(entries.slice(0, 80));
+      setCurrentRelativePath(relativePath);
       setFilePreview(null);
-      toast.success('Loaded partition root preview');
+      toast.success('Loaded partition entries');
     } catch (e) {
       setRootEntries([]);
       toast.error(String(e));
@@ -106,16 +116,30 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
   const previewFile = async (entry: RootEntry) => {
     if (!selectedPart || entry.is_dir) return;
     try {
+      const rel = normalizeRelative(entry.path);
       const content = await invoke<string>('read_partition_file_preview', {
         path: selectedPart.path,
-        relativePath: entry.name,
+        relativePath: rel,
         limit: 8192,
       });
-      setFilePreview({ name: entry.name, content });
+      setFilePreview({ name: rel, content });
       toast.success('Loaded file preview');
     } catch (e) {
       toast.error(String(e));
     }
+  };
+
+  const openDirectory = async (entry: RootEntry) => {
+    if (!entry.is_dir) return;
+    const rel = normalizeRelative(entry.path);
+    await loadEntries(rel);
+  };
+
+  const goParent = async () => {
+    if (!currentRelativePath) return;
+    const parts = currentRelativePath.split(/[/\\]/).filter(Boolean);
+    const parent = parts.slice(0, -1).join('/');
+    await loadEntries(parent);
   };
 
   useEffect(() => {
@@ -271,11 +295,11 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
                               </button>
                             )}
                             <button
-                              onClick={loadRootEntries}
+                              onClick={() => loadEntries('')}
                               disabled={rootLoading}
                               className="ml-2 px-4 py-2 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 text-xs font-black uppercase tracking-wider hover:bg-indigo-600/30 disabled:opacity-50"
                             >
-                              {rootLoading ? 'Loading…' : 'Preview Root Entries'}
+                              {rootLoading ? 'Loading…' : 'Browse Partition'}
                             </button>
                           </div>
                         )}
@@ -284,11 +308,19 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
 
                     {rootEntries.length > 0 && (
                       <div className="space-y-3">
-                        <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest px-2">Partition Root Preview</p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest px-2">Partition Browser</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono text-zinc-500">/{currentRelativePath || ''}</span>
+                            <button className="text-[10px] px-2 py-1 rounded border border-zinc-700 hover:bg-zinc-800" onClick={goParent} disabled={!currentRelativePath}>Up</button>
+                          </div>
+                        </div>
                         <div className="max-h-56 overflow-auto space-y-2 pr-2">
                           {rootEntries.map((entry) => (
                             <div key={entry.path} className="p-3 rounded-xl border border-zinc-800 bg-black/20 flex items-center justify-between gap-2">
-                              <p className="text-xs font-mono truncate">{entry.name}</p>
+                              <button className="text-xs font-mono truncate text-left hover:text-indigo-300" onClick={() => entry.is_dir ? openDirectory(entry) : previewFile(entry)}>
+                                {entry.is_dir ? `📁 ${entry.name}` : entry.name}
+                              </button>
                               <div className="flex items-center gap-2">
                                 {!entry.is_dir && (
                                   <button className="text-[10px] px-2 py-1 rounded border border-zinc-700 hover:bg-zinc-800" onClick={() => previewFile(entry)}>Preview</button>
