@@ -1,6 +1,6 @@
 {
   "name": "master-browser-root",
-  "version": "0.1.7",
+  "version": "0.2.40",
   "private": true,
   "workspaces": [
     "frontend"
