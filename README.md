@@ -27,10 +27,6 @@ No mock data. No simulations. Real userspace drivers.
 | :---: | :---: |
 | ![Editor](docs/images/editor.jpg) | ![Terminal](docs/images/terminal.jpg) |
 
-| Media Viewer |
-| :---: |
-| ![Media Viewer](docs/images/media-viewer.jpg) |
-
 ---
 
 ## ✅ Comprehensive Feature List
