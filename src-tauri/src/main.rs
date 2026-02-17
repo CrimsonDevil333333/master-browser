@@ -656,32 +656,60 @@ fn resolve_partition_browse_base(path: &str) -> Result<String, String> {
 
 #[tauri::command]
 fn list_partition_root_entries(path: String) -> Result<Vec<FileMetadata>, String> {
-    let mount_point = resolve_partition_browse_base(&path)?;
-    list_directory(mount_point)
+    if cfg!(target_os = "windows") {
+        return ext4_raw::list_directory_raw(&path, "");
+    }
+
+    match resolve_partition_browse_base(&path) {
+        Ok(mount_point) => list_directory(mount_point),
+        Err(_) => ext4_raw::list_directory_raw(&path, ""),
+    }
 }
 
 #[tauri::command]
 fn list_partition_entries(path: String, relative_path: String) -> Result<Vec<FileMetadata>, String> {
-    let mount_point = resolve_partition_browse_base(&path)?;
-    let rel = relative_path.trim_start_matches('/').trim_start_matches('\\');
-    let target = if rel.is_empty() {
-        PathBuf::from(mount_point)
-    } else {
-        Path::new(&mount_point).join(rel)
-    };
-    list_directory(target.to_string_lossy().to_string())
+    if cfg!(target_os = "windows") {
+        return ext4_raw::list_directory_raw(&path, &relative_path);
+    }
+
+    match resolve_partition_browse_base(&path) {
+        Ok(mount_point) => {
+            let rel = relative_path.trim_start_matches('/').trim_start_matches('\\');
+            let target = if rel.is_empty() {
+                PathBuf::from(mount_point)
+            } else {
+                Path::new(&mount_point).join(rel)
+            };
+            list_directory(target.to_string_lossy().to_string())
+        },
+        Err(_) => ext4_raw::list_directory_raw(&path, &relative_path),
+    }
 }
 
 #[tauri::command]
 fn read_partition_file_preview(path: String, relative_path: String, limit: usize) -> Result<String, String> {
-    let mount_point = resolve_partition_browse_base(&path)?;
-    let rel = relative_path.trim_start_matches('/').trim_start_matches('\\');
-    let target = Path::new(&mount_point).join(rel);
-    let mut file = File::open(&target).map_err(|e| format!("{}: {}", target.to_string_lossy(), e))?;
-    let mut buf = vec![0u8; limit.min(1024 * 1024)];
-    let n = file.read(&mut buf).map_err(|e| e.to_string())?;
-    let s = String::from_utf8_lossy(&buf[..n]).to_string();
-    Ok(s)
+    if cfg!(target_os = "windows") {
+        let bytes = ext4_raw::read_file_raw(&path, &relative_path)?;
+        let s = String::from_utf8_lossy(&bytes[..limit.min(bytes.len())]).to_string();
+        return Ok(s);
+    }
+
+    match resolve_partition_browse_base(&path) {
+        Ok(mount_point) => {
+            let rel = relative_path.trim_start_matches('/').trim_start_matches('\\');
+            let target = Path::new(&mount_point).join(rel);
+            let mut file = File::open(&target).map_err(|e| format!("{}: {}", target.to_string_lossy(), e))?;
+            let mut buf = vec![0u8; limit.min(1024 * 1024)];
+            let n = file.read(&mut buf).map_err(|e| e.to_string())?;
+            let s = String::from_utf8_lossy(&buf[..n]).to_string();
+            Ok(s)
+        },
+        Err(_) => {
+            let bytes = ext4_raw::read_file_raw(&path, &relative_path)?;
+            let s = String::from_utf8_lossy(&bytes[..limit.min(bytes.len())]).to_string();
+            Ok(s)
+        }
+    }
 }
 
 #[tauri::command]
