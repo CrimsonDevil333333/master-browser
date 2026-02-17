@@ -1,5 +1,5 @@
 use serde::{Serialize, Deserialize};
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
@@ -84,13 +84,41 @@ pub fn list_raw_devices() -> Result<Vec<RawBlockDevice>, String> {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, we can iterate PhysicalDrive numbers
+        for i in 0..16 {
+            let path = format!("\\\\.\\PhysicalDrive{}", i);
+            if let Ok(file) = File::open(&path) {
+                let size = file.metadata().map(|m| m.len()).unwrap_or(0);
+                
+                // For simplicity in Alpha, we'll treat the drive as one partition if no logic exists
+                // Real implementation would use IOCTL_DISK_GET_DRIVE_LAYOUT_EX
+                devices.push(RawBlockDevice {
+                    name: format!("Disk {}", i),
+                    path: path.clone(),
+                    size,
+                    device_type: "disk".to_string(),
+                    partitions: vec![RawPartition {
+                        name: format!("Partition 1"),
+                        path: path,
+                        size,
+                        fs_type: None,
+                    }],
+                });
+            }
+        }
+    }
+
     Ok(devices)
 }
 
 pub fn inspect_partition(path: &str) -> Result<FSInspectorInfo, String> {
     let mut file = File::open(path).map_err(|e| format!("Failed to open device: {}", e))?;
     let mut buffer = [0u8; 4096];
-    file.read_exact(&mut buffer).map_err(|e| e.to_string())?;
+    if file.read_exact(&mut buffer).is_err() {
+        return Err("Unable to read disk sectors. Admin privileges required.".into());
+    }
 
     // --- Signature Detection ---
 
