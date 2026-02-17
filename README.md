@@ -37,6 +37,14 @@ No mock data paths are used for core actions — operations are wired to real ba
 | :---: |
 | ![Media Viewer](docs/images/media-viewer.jpg) |
 
+### Legacy/Planned UI (from previous iterations)
+
+| Legacy Sidebar (Chronology/Anchors) | Legacy Nexus Scan |
+| :---: | :---: |
+| ![Legacy Sidebar](docs/images/sidebar-legacy.jpg) | ![Legacy Nexus Scan](docs/images/nexus-scan-legacy.jpg) |
+
+> Note: these legacy views are not fully wired in the current stable build yet.
+
 ---
 
 ## ✅ Core Features
