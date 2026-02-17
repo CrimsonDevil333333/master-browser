@@ -1,6 +1,8 @@
-# 🧭 Master Browser: The Universal Filesystem Bridge
+<p align="center">
+  <img src="src-tauri/icons/128x128@2x.png" width="128" height="128" alt="Master Browser Logo" />
+</p>
 
-![Master Browser Banner](src-tauri/icons/icon.png)
+# 🧭 Master Browser: The Universal Filesystem Bridge
 
 **Master Browser** is a high-performance, user-space filesystem explorer built with **Rust + Tauri**. It bridges the gap between Windows, macOS, and Linux by allowing direct access to filesystems without requiring kernel-level mounting.
 
@@ -22,19 +24,39 @@
 - **Frontend**: Next.js, React, Tailwind CSS, Framer Motion, `react-window`
 
 ## 🏗️ Getting Started
-### Prerequisites
-- Rust (latest stable)
-- Node.js (v18+)
-- WebKitGTK 4.1 (Linux)
 
-### Build
+### 1. Prerequisites
+- **Rust**: [rustup.rs](https://rustup.rs/)
+- **Node.js**: v18 or later
+- **Linux Deps**: `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `librsvg2-dev`
+
+### 2. Installation
 ```bash
-# Frontend
-cd frontend && npm install && npm run build
+# Clone the repo
+git clone https://github.com/CrimsonDevil333333/master-browser.git
+cd master-browser
 
-# Backend
-cd src-tauri && cargo build
+# Install dependencies
+npm install
+cd frontend && npm install
 ```
+
+### 3. Development
+Run the app in development mode with hot-reloading:
+```bash
+# Start the Tauri dev environment
+npm run tauri dev
+```
+
+### 4. Production Build
+Generate a standalone executable for your platform:
+```bash
+# Build the production binaries
+npm run tauri build
+```
+
+## 🛡️ Usage Notes (Windows)
+To access raw physical disks (unmounted ext4/NTFS drives), you **must** run the application with **Administrator Privileges**. Right-click the executable and select **"Run as Administrator"**.
 
 ---
 *Developed by the OpenClaw Swarm for Satyaa.*
