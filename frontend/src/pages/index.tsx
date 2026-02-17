@@ -22,6 +22,10 @@ import {
   Scissors,
   Clipboard,
   Music,
+  FilePlus2,
+  FolderPlus,
+  Pencil,
+  Ban,
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { RawDiskViewer } from '../components/RawDiskViewer';
@@ -74,8 +78,11 @@ export default function MasterBrowser() {
   const [terminalInput, setTerminalInput] = useState('');
   const [terminalOutput, setTerminalOutput] = useState<string[]>(['Sovereign Shell v0.2.19 connected.']);
   const [terminalRunning, setTerminalRunning] = useState(false);
+  const [terminalRequestId, setTerminalRequestId] = useState<string | null>(null);
   const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
   const [terminalHistoryIndex, setTerminalHistoryIndex] = useState<number>(-1);
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path?: string } | null>(null);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -166,10 +173,19 @@ export default function MasterBrowser() {
           void saveFile();
         }
       }
+
+      if (e.key === 'Escape') {
+        setContextMenu(null);
+      }
     };
 
+    const onClickAway = () => setContextMenu(null);
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('click', onClickAway);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('click', onClickAway);
+    };
   }, [view, activeFile]);
 
   const navigateUp = () => {
@@ -255,12 +271,79 @@ export default function MasterBrowser() {
     }
   };
 
+  const joinCurrentPath = (name: string) => {
+    const separator = currentPath.includes('\\') ? '\\' : '/';
+    return `${currentPath}${currentPath.endsWith('/') || currentPath.endsWith('\\') ? '' : separator}${name}`;
+  };
+
+  const createNewFile = async () => {
+    const name = prompt('New file name');
+    if (!name) return;
+    const path = joinCurrentPath(name);
+    try {
+      await invoke('create_file', { path });
+      toast.success('File created');
+      fetchDirectory(currentPath);
+    } catch {
+      toast.error('Create file failed');
+    }
+  };
+
+  const createNewFolder = async () => {
+    const name = prompt('New folder name');
+    if (!name) return;
+    const path = joinCurrentPath(name);
+    try {
+      await invoke('create_folder', { path });
+      toast.success('Folder created');
+      fetchDirectory(currentPath);
+    } catch {
+      toast.error('Create folder failed');
+    }
+  };
+
+  const renameSinglePath = async (sourcePath?: string) => {
+    const targetPath = sourcePath || (selectedPaths.length === 1 ? selectedPaths[0] : undefined);
+    if (!targetPath) {
+      toast.info('Select exactly one item to rename');
+      return;
+    }
+    const currentName = targetPath.split(/[/\\]/).pop() || '';
+    const nextName = prompt('Rename to', currentName);
+    if (!nextName || nextName === currentName) return;
+    const base = targetPath.slice(0, targetPath.length - currentName.length);
+    const newPath = `${base}${nextName}`;
+
+    try {
+      await invoke('rename_path', { oldPath: targetPath, newPath });
+      toast.success('Renamed');
+      fetchDirectory(currentPath);
+    } catch {
+      toast.error('Rename failed');
+    }
+  };
+
+  const cancelTerminalCommand = async () => {
+    if (!terminalRequestId || !terminalRunning) return;
+    try {
+      await invoke('cancel_terminal_command', { requestId: terminalRequestId });
+      setTerminalOutput((p) => [...p.slice(0, -1), '⛔ command canceled']);
+    } catch {
+      toast.error('Cancel failed');
+    } finally {
+      setTerminalRunning(false);
+      setTerminalRequestId(null);
+    }
+  };
+
   const runCommand = async () => {
     if (!terminalInput.trim() || terminalRunning) return;
 
     const cmd = terminalInput;
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     setTerminalInput('');
     setTerminalRunning(true);
+    setTerminalRequestId(requestId);
     setTerminalHistory((prev) => {
       if (prev[0] === cmd) return prev;
       return [cmd, ...prev].slice(0, 200);
@@ -269,12 +352,13 @@ export default function MasterBrowser() {
     setTerminalOutput((p) => [...p, `> ${cmd}`, '⏳ running...']);
 
     try {
-      const res = await invoke<string>('run_terminal_command', { command: cmd, dir: currentPath || '.' });
+      const res = await invoke<string>('run_terminal_command', { command: cmd, dir: currentPath || '.', requestId });
       setTerminalOutput((p) => [...p.slice(0, -1), res || '(no output)']);
     } catch (e) {
       setTerminalOutput((p) => [...p.slice(0, -1), `Error: ${e}`]);
     } finally {
       setTerminalRunning(false);
+      setTerminalRequestId(null);
     }
   };
 
@@ -305,6 +389,27 @@ export default function MasterBrowser() {
         setTerminalInput(terminalHistory[nextIndex] || '');
       }
     }
+  };
+
+  const filteredFiles = files.filter((f) => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  const handleFileRowClick = (e: any, file: FileMetadata, index: number) => {
+    if (e.shiftKey && lastSelectedIndex !== null) {
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const rangePaths = filteredFiles.slice(start, end + 1).map((x) => x.path);
+      setSelectedPaths((prev) => Array.from(new Set([...prev, ...rangePaths])));
+      return;
+    }
+
+    if (e.ctrlKey || e.metaKey) {
+      setSelectedPaths((prev) => (prev.includes(file.path) ? prev.filter((x) => x !== file.path) : [...prev, file.path]));
+      setLastSelectedIndex(index);
+      return;
+    }
+
+    setSelectedPaths([file.path]);
+    setLastSelectedIndex(index);
   };
 
   const formatSize = (b: number) => {
@@ -447,16 +552,25 @@ export default function MasterBrowser() {
                     </button>
                     <input className="flex-1 bg-transparent border-none outline-none font-mono text-sm font-black" value={pathInput} onChange={(e) => setPathInput(e.target.value)} />
                     <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => handleAction('copy')} className="p-2 text-zinc-400 hover:text-indigo-500">
+                      <button type="button" onClick={createNewFile} className="p-2 text-zinc-400 hover:text-emerald-500" title="New file">
+                        <FilePlus2 className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={createNewFolder} className="p-2 text-zinc-400 hover:text-emerald-500" title="New folder">
+                        <FolderPlus className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => void renameSinglePath()} className="p-2 text-zinc-400 hover:text-indigo-500" title="Rename">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => handleAction('copy')} className="p-2 text-zinc-400 hover:text-indigo-500" title="Copy">
                         <Copy className="w-4 h-4" />
                       </button>
-                      <button type="button" onClick={() => handleAction('move')} className="p-2 text-zinc-400 hover:text-indigo-500">
+                      <button type="button" onClick={() => handleAction('move')} className="p-2 text-zinc-400 hover:text-indigo-500" title="Move">
                         <Scissors className="w-4 h-4" />
                       </button>
-                      <button type="button" onClick={() => handleAction('paste')} className={cn('p-2', clipboard ? 'text-amber-500' : 'text-zinc-400')}>
+                      <button type="button" onClick={() => handleAction('paste')} className={cn('p-2', clipboard ? 'text-amber-500' : 'text-zinc-400')} title="Paste">
                         <Clipboard className="w-4 h-4" />
                       </button>
-                      <button type="button" onClick={() => handleAction('delete')} className="p-2 text-zinc-400 hover:text-red-500">
+                      <button type="button" onClick={() => handleAction('delete')} className="p-2 text-zinc-400 hover:text-red-500" title="Delete">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -464,18 +578,22 @@ export default function MasterBrowser() {
 
                   {loading && <p className="text-xs text-zinc-400">Loading…</p>}
 
-                  <div className="grid grid-cols-1 gap-2">
-                    {files
-                      .filter((f) => f.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                      .map((f) => (
+                  <div
+                    className="grid grid-cols-1 gap-2"
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setContextMenu({ x: e.clientX, y: e.clientY });
+                    }}
+                  >
+                    {filteredFiles.map((f, index) => (
                         <div
                           key={f.path}
-                          onClick={(e) => {
-                            if (e.ctrlKey) {
-                              setSelectedPaths((p) => (p.includes(f.path) ? p.filter((x) => x !== f.path) : [...p, f.path]));
-                            } else {
-                              f.is_dir ? setCurrentPath(f.path) : openFile(f);
-                            }
+                          onClick={(e) => handleFileRowClick(e, f, index)}
+                          onDoubleClick={() => (f.is_dir ? setCurrentPath(f.path) : openFile(f))}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            if (!selectedPaths.includes(f.path)) setSelectedPaths([f.path]);
+                            setContextMenu({ x: e.clientX, y: e.clientY, path: f.path });
                           }}
                           className={cn(
                             'flex items-center gap-5 p-5 rounded-[2rem] border transition-all cursor-pointer shadow-sm group',
@@ -529,8 +647,17 @@ export default function MasterBrowser() {
                       onClick={runCommand}
                       disabled={terminalRunning}
                       className="p-3 bg-indigo-600 rounded-xl hover:bg-indigo-500 text-white shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Run"
                     >
                       <Play className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={cancelTerminalCommand}
+                      disabled={!terminalRunning}
+                      className="p-3 bg-red-600/80 rounded-xl hover:bg-red-500 text-white shadow-lg disabled:opacity-40 disabled:cursor-not-allowed"
+                      title="Cancel running command"
+                    >
+                      <Ban className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -571,6 +698,34 @@ export default function MasterBrowser() {
           </AnimatePresence>
         </div>
       </main>
+
+      {contextMenu && view === 'explorer' && (
+        <div
+          className="fixed z-[120] w-56 rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl p-2"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {contextMenu.path && (
+            <>
+              <button className="w-full text-left px-3 py-2 text-xs hover:bg-zinc-800 rounded-lg" onClick={() => {
+                const target = files.find((f) => f.path === contextMenu.path);
+                if (target) {
+                  target.is_dir ? setCurrentPath(target.path) : void openFile(target);
+                }
+                setContextMenu(null);
+              }}>Open</button>
+              <button className="w-full text-left px-3 py-2 text-xs hover:bg-zinc-800 rounded-lg" onClick={() => { void renameSinglePath(contextMenu.path); setContextMenu(null); }}>Rename</button>
+              <button className="w-full text-left px-3 py-2 text-xs hover:bg-zinc-800 rounded-lg" onClick={() => { setClipboard({ paths: [contextMenu.path!], type: 'copy' }); setContextMenu(null); }}>Copy</button>
+              <button className="w-full text-left px-3 py-2 text-xs hover:bg-zinc-800 rounded-lg" onClick={() => { setClipboard({ paths: [contextMenu.path!], type: 'move' }); setContextMenu(null); }}>Move</button>
+              <button className="w-full text-left px-3 py-2 text-xs hover:bg-red-900/40 text-red-300 rounded-lg" onClick={() => { setSelectedPaths([contextMenu.path!]); void handleAction('delete'); setContextMenu(null); }}>Delete</button>
+              <div className="my-2 border-t border-zinc-700" />
+            </>
+          )}
+          <button className="w-full text-left px-3 py-2 text-xs hover:bg-zinc-800 rounded-lg" onClick={() => { void createNewFile(); setContextMenu(null); }}>New File</button>
+          <button className="w-full text-left px-3 py-2 text-xs hover:bg-zinc-800 rounded-lg" onClick={() => { void createNewFolder(); setContextMenu(null); }}>New Folder</button>
+          <button className="w-full text-left px-3 py-2 text-xs hover:bg-zinc-800 rounded-lg" onClick={() => { void handleAction('paste'); setContextMenu(null); }}>Paste</button>
+        </div>
+      )}
     </div>
   );
 }

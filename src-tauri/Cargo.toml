@@ -28,6 +28,7 @@ base64 = "0.21"
 ntfs = "0.4"
 fatfs = "0.3"
 fscommon = "0.1"
+once_cell = "1.19"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = { version = "0.18", default-features = false, features = ["v2_12"] }

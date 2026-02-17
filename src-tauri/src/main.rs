@@ -15,7 +15,10 @@ use sha2::{Sha256, Digest};
 use md5::Md5;
 use base64::{Engine as _, engine::general_purpose};
 use image::io::Reader as ImageReader;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::collections::HashMap;
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
 
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -78,6 +81,8 @@ pub struct SystemStats {
     pub net_upload: u64,
     pub net_download: u64,
 }
+
+static TERMINAL_PROCESSES: Lazy<Mutex<HashMap<String, u32>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn get_disks_internal() -> Vec<DiskInfo> {
     let mut disks = Vec::new();
@@ -264,6 +269,24 @@ fn delete_files(paths: Vec<String>) -> Result<(), String> {
             fs::remove_file(path).map_err(|e| e.to_string())?;
         }
     }
+    Ok(())
+}
+
+#[tauri::command]
+fn create_file(path: String) -> Result<(), String> {
+    File::create(path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn create_folder(path: String) -> Result<(), String> {
+    fs::create_dir_all(path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn rename_path(old_path: String, new_path: String) -> Result<(), String> {
+    fs::rename(old_path, new_path).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -462,26 +485,73 @@ fn get_image_thumbnail(path: String, size: u32) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn run_terminal_command(command: String, dir: String) -> Result<String, String> {
-    let command_clone = command.clone();
-    let dir_clone = dir.clone();
-
+async fn run_terminal_command(command: String, dir: String, request_id: String) -> Result<String, String> {
     let output = tauri::async_runtime::spawn_blocking(move || {
-        if cfg!(target_os = "windows") {
-            Command::new("cmd").args(&["/C", &command_clone]).current_dir(dir_clone).output()
+        let mut child = if cfg!(target_os = "windows") {
+            Command::new("cmd")
+                .args(&["/C", &command])
+                .current_dir(&dir)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
         } else {
-            Command::new("sh").args(&["-c", &command_clone]).current_dir(dir_clone).output()
+            Command::new("sh")
+                .args(&["-c", &command])
+                .current_dir(&dir)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
         }
+        .map_err(|e| e.to_string())?;
+
+        let pid = child.id();
+        {
+            let mut map = TERMINAL_PROCESSES.lock().map_err(|_| "terminal process lock error".to_string())?;
+            map.insert(request_id.clone(), pid);
+        }
+
+        let wait_result = child.wait_with_output().map_err(|e| e.to_string());
+
+        if let Ok(mut map) = TERMINAL_PROCESSES.lock() {
+            map.remove(&request_id);
+        }
+
+        wait_result
     })
     .await
-    .map_err(|e| e.to_string())?
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| e.to_string())??;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     } else {
         Err(String::from_utf8_lossy(&output.stderr).into_owned())
     }
+}
+
+#[tauri::command]
+fn cancel_terminal_command(request_id: String) -> Result<(), String> {
+    let pid = {
+        let mut map = TERMINAL_PROCESSES.lock().map_err(|_| "terminal process lock error".to_string())?;
+        map.remove(&request_id).ok_or("No running command for request id")?
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .status()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .status()
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -515,6 +585,9 @@ fn main() {
             copy_files,
             move_files,
             delete_files,
+            create_file,
+            create_folder,
+            rename_path,
             get_recent_files,
             track_recent_file,
             get_file_details,
@@ -529,6 +602,7 @@ fn main() {
             calculate_hash,
             get_image_thumbnail,
             run_terminal_command,
+            cancel_terminal_command,
             scan_local_network,
             get_raw_devices,
             inspect_partition_details
