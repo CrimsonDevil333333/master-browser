@@ -125,7 +125,13 @@ fn get_permissions_string(meta: &fs::Metadata) -> String {
 
 #[tauri::command]
 fn list_directory(path: String) -> Result<Vec<FileMetadata>, String> {
-    let entries = fs::read_dir(&path).map_err(|e| e.to_string())?;
+    let clean_path = if cfg!(target_os = "windows") {
+        path.trim_start_matches('/').replace("/", "\\")
+    } else {
+        path
+    };
+    
+    let entries = fs::read_dir(&clean_path).map_err(|e| format!("{}: {}", clean_path, e.to_string()))?;
     let mut metadata_list = Vec::new();
 
     for entry in entries {
