@@ -27,15 +27,15 @@ No mock data paths are used for core actions — operations are wired to real ba
 
 | Dashboard | Explorer |
 | :---: | :---: |
-| ![Dashboard](docs/images/dashboard.png) | ![Explorer](docs/images/explorer.png) |
+| ![Dashboard](docs/images/dashboard.jpg) | ![Explorer](docs/images/explorer.jpg) |
 
 | Editor | Terminal |
 | :---: | :---: |
-| ![Editor](docs/images/editor.png) | ![Terminal](docs/images/terminal.png) |
+| ![Editor](docs/images/editor.jpg) | ![Terminal](docs/images/terminal.jpg) |
 
 | Media Viewer |
 | :---: |
-| ![Media Viewer](docs/images/media-viewer.png) |
+| ![Media Viewer](docs/images/media-viewer.jpg) |
 
 ---
 
