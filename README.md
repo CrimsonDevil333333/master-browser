@@ -17,7 +17,6 @@ No mock data. No simulations. Real userspace drivers.
 
 ## 📸 Screenshots
 
-> Place screenshots in `docs/images/` with these exact names.
 
 | Dashboard | Explorer |
 | :---: | :---: |
