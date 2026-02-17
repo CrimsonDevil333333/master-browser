@@ -29,17 +29,29 @@ interface FSInfo {
   features: string[];
 }
 
+interface PartitionAccessPlan {
+  path: string;
+  fs_type?: string;
+  mount_point?: string;
+  can_browse_now: boolean;
+  message: string;
+}
+
 export const RawDiskViewer: React.FC = () => {
   const [devices, setDevices] = useState<RawBlockDevice[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedPart, setSelectedPart] = useState<RawPartition | null>(null);
   const [fsInfo, setFsInfo] = useState<FSInfo | null>(null);
+  const [accessPlan, setAccessPlan] = useState<PartitionAccessPlan | null>(null);
 
   const fetchDevices = async () => {
     setLoading(true);
     try {
       const res = await invoke<RawBlockDevice[]>('get_raw_devices');
       setDevices(res);
+      setSelectedPart(null);
+      setFsInfo(null);
+      setAccessPlan(null);
     } catch (e) {
       toast.error('Failed to probe block devices');
     } finally {
@@ -49,11 +61,16 @@ export const RawDiskViewer: React.FC = () => {
 
   const inspectPartition = async (path: string) => {
     try {
-      const res = await invoke<FSInfo>('inspect_partition_details', { path });
+      const [res, plan] = await Promise.all([
+        invoke<FSInfo>('inspect_partition_details', { path }),
+        invoke<PartitionAccessPlan>('get_partition_access_plan', { path }),
+      ]);
       setFsInfo(res);
+      setAccessPlan(plan);
       toast.success(`${res.fs_type} Signature Detected`);
     } catch (e) {
       setFsInfo(null);
+      setAccessPlan(null);
       toast.error('Unknown filesystem or access denied');
     }
   };
@@ -178,6 +195,15 @@ export const RawDiskViewer: React.FC = () => {
                         <p className="text-xs text-zinc-500 font-medium leading-relaxed mt-1">
                             Successfully parsed {fsInfo.fs_type} header via user-space driver. This metadata is extracted directly from disk sectors, making it available on all platforms regardless of OS support.
                         </p>
+                        {accessPlan && (
+                          <p className="text-xs mt-3 font-medium leading-relaxed text-zinc-300">
+                            <span className={accessPlan.can_browse_now ? 'text-emerald-400' : 'text-amber-400'}>
+                              {accessPlan.can_browse_now ? 'Browse Ready:' : 'Browse Pending:'}
+                            </span>{' '}
+                            {accessPlan.message}
+                            {accessPlan.mount_point ? ` (mount: ${accessPlan.mount_point})` : ''}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -82,6 +82,15 @@ pub struct SystemStats {
     pub net_download: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PartitionAccessPlan {
+    pub path: String,
+    pub fs_type: Option<String>,
+    pub mount_point: Option<String>,
+    pub can_browse_now: bool,
+    pub message: String,
+}
+
 static TERMINAL_PROCESSES: Lazy<Mutex<HashMap<String, u32>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn get_disks_internal() -> Vec<DiskInfo> {
@@ -555,6 +564,73 @@ fn cancel_terminal_command(request_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn get_partition_access_plan(path: String) -> Result<PartitionAccessPlan, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let output = Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!(
+                    "Get-Partition | Where-Object {{$_.AccessPaths -contains '{}' -or $_.DiskPath -eq '{}'}} | Select-Object -First 1 DriveLetter | ConvertTo-Json -Compress",
+                    path, path
+                ),
+            ])
+            .output()
+            .map_err(|e| e.to_string())?;
+
+        let txt = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let mounted = !txt.is_empty() && txt != "null";
+
+        return Ok(PartitionAccessPlan {
+            path,
+            fs_type: None,
+            mount_point: None,
+            can_browse_now: mounted,
+            message: if mounted {
+                "Partition appears mounted. Explorer access is available via OS path.".to_string()
+            } else {
+                "Partition is not mounted. Raw userspace Ext4 browsing is next milestone (in progress).".to_string()
+            },
+        });
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("lsblk")
+            .args(["-no", "MOUNTPOINT,FSTYPE", &path])
+            .output()
+            .map_err(|e| e.to_string())?;
+
+        let txt = String::from_utf8_lossy(&output.stdout);
+        let line = txt.lines().next().unwrap_or("").trim();
+        let parts: Vec<&str> = line.split_whitespace().collect();
+
+        let (mount_point, fs_type) = if parts.len() >= 2 {
+            (Some(parts[0].to_string()).filter(|s| !s.is_empty()), Some(parts[1].to_string()))
+        } else if parts.len() == 1 {
+            (Some(parts[0].to_string()).filter(|s| !s.is_empty()), None)
+        } else {
+            (None, None)
+        };
+
+        let mounted = mount_point.as_ref().map(|s| !s.is_empty()).unwrap_or(false);
+
+        Ok(PartitionAccessPlan {
+            path,
+            fs_type,
+            mount_point,
+            can_browse_now: mounted,
+            message: if mounted {
+                "Partition is mounted and can be explored through current Explorer flow.".to_string()
+            } else {
+                "Partition is not mounted. Raw userspace Ext4 browsing is the next implementation step.".to_string()
+            },
+        })
+    }
+}
+
+#[tauri::command]
 fn scan_local_network() -> Result<Vec<String>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -648,6 +724,7 @@ fn main() {
             get_image_thumbnail,
             run_terminal_command,
             cancel_terminal_command,
+            get_partition_access_plan,
             scan_local_network,
             get_raw_devices,
             inspect_partition_details
