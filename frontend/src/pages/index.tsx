@@ -69,11 +69,13 @@ export default function MasterBrowser() {
   const [, setStats] = useState<SystemStats | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [clipboard, setClipboard] = useState<{ paths: string[]; type: 'copy' | 'move' } | null>(null);
-  const [activeFile, setActiveFile] = useState<{ path: string; content: string; type: ViewerType } | null>(null);
+  const [activeFile, setActiveFile] = useState<{ path: string; content: string; originalContent: string; type: ViewerType } | null>(null);
   const [mediaOverlay, setMediaOverlay] = useState<{ path: string; type: 'image' | 'video' | 'audio' } | null>(null);
   const [terminalInput, setTerminalInput] = useState('');
   const [terminalOutput, setTerminalOutput] = useState<string[]>(['Sovereign Shell v0.2.19 connected.']);
   const [terminalRunning, setTerminalRunning] = useState(false);
+  const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
+  const [terminalHistoryIndex, setTerminalHistoryIndex] = useState<number>(-1);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -134,6 +136,42 @@ export default function MasterBrowser() {
     }
   }, [view, currentPath]);
 
+  const editorDirty = !!activeFile && activeFile.content !== activeFile.originalContent;
+
+  const guardedSetView = (nextView: ViewMode) => {
+    if (view === 'editor' && editorDirty) {
+      const proceed = confirm('You have unsaved changes. Leave editor anyway?');
+      if (!proceed) return;
+    }
+    setView(nextView);
+  };
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (view === 'editor' && editorDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [view, editorDirty]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        if (view === 'editor' && activeFile) {
+          e.preventDefault();
+          void saveFile();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [view, activeFile]);
+
   const navigateUp = () => {
     if (!currentPath || currentPath === '/' || currentPath.match(/^[A-Z]:\\$/i)) return;
     const parts = currentPath.split(/[/\\]/).filter(Boolean);
@@ -166,7 +204,7 @@ export default function MasterBrowser() {
     setLoading(true);
     try {
       const content = await invoke<string>('read_file_content', { path: file.path });
-      setActiveFile({ path: file.path, content, type });
+      setActiveFile({ path: file.path, content, originalContent: content, type });
       setView('editor');
     } catch {
       toast.error('Binary or protected file');
@@ -179,6 +217,7 @@ export default function MasterBrowser() {
     if (!activeFile) return;
     try {
       await invoke('write_file_content', { path: activeFile.path, content: activeFile.content });
+      setActiveFile((prev) => (prev ? { ...prev, originalContent: prev.content } : null));
       toast.success('File saved');
     } catch {
       toast.error('Write Access Denied');
@@ -222,6 +261,11 @@ export default function MasterBrowser() {
     const cmd = terminalInput;
     setTerminalInput('');
     setTerminalRunning(true);
+    setTerminalHistory((prev) => {
+      if (prev[0] === cmd) return prev;
+      return [cmd, ...prev].slice(0, 200);
+    });
+    setTerminalHistoryIndex(-1);
     setTerminalOutput((p) => [...p, `> ${cmd}`, '⏳ running...']);
 
     try {
@@ -231,6 +275,35 @@ export default function MasterBrowser() {
       setTerminalOutput((p) => [...p.slice(0, -1), `Error: ${e}`]);
     } finally {
       setTerminalRunning(false);
+    }
+  };
+
+  const handleTerminalInputKeyDown = (e: any) => {
+    if (e.key === 'Enter') {
+      void runCommand();
+      return;
+    }
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!terminalHistory.length) return;
+      const nextIndex = Math.min(terminalHistoryIndex + 1, terminalHistory.length - 1);
+      setTerminalHistoryIndex(nextIndex);
+      setTerminalInput(terminalHistory[nextIndex] || '');
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!terminalHistory.length) return;
+      const nextIndex = terminalHistoryIndex - 1;
+      if (nextIndex < 0) {
+        setTerminalHistoryIndex(-1);
+        setTerminalInput('');
+      } else {
+        setTerminalHistoryIndex(nextIndex);
+        setTerminalInput(terminalHistory[nextIndex] || '');
+      }
     }
   };
 
@@ -247,7 +320,7 @@ export default function MasterBrowser() {
           key={disk.mount_point}
           onClick={() => {
             setCurrentPath(disk.mount_point);
-            setView('explorer');
+            guardedSetView('explorer');
           }}
           className="p-10 rounded-[3rem] bg-zinc-900/40 border border-zinc-800 shadow-xl hover:border-indigo-500 cursor-pointer transition-all relative overflow-hidden group text-zinc-100"
         >
@@ -324,7 +397,7 @@ export default function MasterBrowser() {
           ].map((item) => (
             <button
               key={item.id}
-              onClick={() => setView(item.id as ViewMode)}
+              onClick={() => guardedSetView(item.id as ViewMode)}
               className={cn(
                 'flex items-center gap-4 w-full px-5 py-3.5 rounded-xl text-sm font-bold transition-all',
                 view === item.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-400 hover:bg-white/5',
@@ -448,7 +521,7 @@ export default function MasterBrowser() {
                       className="flex-1 bg-transparent border-none outline-none text-[11px] font-mono text-zinc-100 disabled:opacity-50"
                       value={terminalInput}
                       onChange={(e) => setTerminalInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && runCommand()}
+                      onKeyDown={handleTerminalInputKeyDown}
                       placeholder={terminalRunning ? 'Command running…' : 'Command...'}
                       disabled={terminalRunning}
                     />
@@ -467,11 +540,11 @@ export default function MasterBrowser() {
                 <div className="h-full min-h-0 flex flex-col gap-6">
                   <div className="flex items-center justify-between p-6 bg-zinc-900/50 rounded-[2.5rem] border border-zinc-800 shadow-sm text-zinc-100">
                     <div className="flex items-center gap-6">
-                      <button onClick={() => setView('explorer')} className="p-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-zinc-100">
+                      <button onClick={() => guardedSetView('explorer')} className="p-4 bg-zinc-800 hover:bg-zinc-700 rounded-2xl text-zinc-100">
                         <ArrowLeft className="w-5 h-5" />
                       </button>
                       <div>
-                        <p className="text-[10px] font-black text-zinc-400 uppercase">Editor</p>
+                        <p className="text-[10px] font-black text-zinc-400 uppercase">Editor {editorDirty ? '• UNSAVED' : '• SAVED'}</p>
                         <p className="text-xs font-mono font-black text-indigo-400">{activeFile.path}</p>
                       </div>
                     </div>
