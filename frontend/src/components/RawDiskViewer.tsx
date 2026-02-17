@@ -51,6 +51,7 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
   const [accessPlan, setAccessPlan] = useState<PartitionAccessPlan | null>(null);
   const [rootEntries, setRootEntries] = useState<RootEntry[]>([]);
   const [rootLoading, setRootLoading] = useState(false);
+  const [filePreview, setFilePreview] = useState<{ name: string; content: string } | null>(null);
 
   const fetchDevices = async () => {
     setLoading(true);
@@ -76,6 +77,7 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
       setFsInfo(res);
       setAccessPlan(plan);
       setRootEntries([]);
+      setFilePreview(null);
       toast.success(`${res.fs_type} Signature Detected`);
     } catch (e) {
       setFsInfo(null);
@@ -91,12 +93,28 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
     try {
       const entries = await invoke<RootEntry[]>('list_partition_root_entries', { path: selectedPart.path });
       setRootEntries(entries.slice(0, 40));
+      setFilePreview(null);
       toast.success('Loaded partition root preview');
     } catch (e) {
       setRootEntries([]);
       toast.error(String(e));
     } finally {
       setRootLoading(false);
+    }
+  };
+
+  const previewFile = async (entry: RootEntry) => {
+    if (!selectedPart || entry.is_dir) return;
+    try {
+      const content = await invoke<string>('read_partition_file_preview', {
+        path: selectedPart.path,
+        relativePath: entry.name,
+        limit: 8192,
+      });
+      setFilePreview({ name: entry.name, content });
+      toast.success('Loaded file preview');
+    } catch (e) {
+      toast.error(String(e));
     }
   };
 
@@ -271,10 +289,22 @@ export const RawDiskViewer: React.FC<{ onOpenPath?: (path: string) => void }> = 
                           {rootEntries.map((entry) => (
                             <div key={entry.path} className="p-3 rounded-xl border border-zinc-800 bg-black/20 flex items-center justify-between gap-2">
                               <p className="text-xs font-mono truncate">{entry.name}</p>
-                              <p className="text-[10px] text-zinc-500 uppercase">{entry.is_dir ? 'dir' : `${(entry.size / 1024).toFixed(1)} KB`}</p>
+                              <div className="flex items-center gap-2">
+                                {!entry.is_dir && (
+                                  <button className="text-[10px] px-2 py-1 rounded border border-zinc-700 hover:bg-zinc-800" onClick={() => previewFile(entry)}>Preview</button>
+                                )}
+                                <p className="text-[10px] text-zinc-500 uppercase">{entry.is_dir ? 'dir' : `${(entry.size / 1024).toFixed(1)} KB`}</p>
+                              </div>
                             </div>
                           ))}
                         </div>
+                      </div>
+                    )}
+
+                    {filePreview && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-black text-zinc-600 uppercase tracking-widest px-2">File Preview: {filePreview.name}</p>
+                        <pre className="p-4 rounded-2xl border border-zinc-800 bg-black/30 text-xs text-zinc-300 max-h-56 overflow-auto whitespace-pre-wrap">{filePreview.content}</pre>
                       </div>
                     )}
                   </div>

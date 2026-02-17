@@ -658,6 +658,31 @@ fn list_partition_root_entries(path: String) -> Result<Vec<FileMetadata>, String
 }
 
 #[tauri::command]
+fn read_partition_file_preview(path: String, relative_path: String, limit: usize) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = (path, relative_path, limit);
+        Err("Raw file preview on unmounted Windows partitions is pending userspace reader implementation.".to_string())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mount_point = linux_mount_info(&path)
+            .map(|(mp, _)| mp)
+            .filter(|s| !s.is_empty())
+            .ok_or("Partition is not mounted; raw file preview pending userspace reader.".to_string())?;
+
+        let rel = relative_path.trim_start_matches('/').trim_start_matches('\\');
+        let target = Path::new(&mount_point).join(rel);
+        let mut file = File::open(&target).map_err(|e| format!("{}: {}", target.to_string_lossy(), e))?;
+        let mut buf = vec![0u8; limit.min(1024 * 1024)];
+        let n = file.read(&mut buf).map_err(|e| e.to_string())?;
+        let s = String::from_utf8_lossy(&buf[..n]).to_string();
+        Ok(s)
+    }
+}
+
+#[tauri::command]
 fn get_partition_mount_path(path: String) -> Result<Option<String>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -768,6 +793,7 @@ fn main() {
             get_partition_access_plan,
             get_partition_mount_path,
             list_partition_root_entries,
+            read_partition_file_preview,
             scan_local_network,
             get_raw_devices,
             inspect_partition_details
