@@ -218,6 +218,38 @@ export default function MasterBrowser() {
   }, [view, editorDirty]);
 
   useEffect(() => {
+    if (isTauri) {
+      import('@tauri-apps/api/window').then(({ appWindow }) => {
+        appWindow.listen('tauri://file-drop', (event) => {
+          const paths = event.payload as string[];
+          if (paths && paths.length > 0) {
+            const first = paths[0];
+            // Simple heuristic: if dropping folder, go there. If file, select it or open parent.
+            // For now, we'll try to navigate to parent dir and select file
+            // Or just alert path. Implementing basic open logic:
+            invoke<boolean>('is_dir', { path: first }).then(isDir => {
+              if (isDir) {
+                setCurrentPath(first);
+                guardedSetView('explorer');
+              } else {
+                // it's a file, open it
+                // Need to construct minimal metadata to reuse openFile
+                // For v0.2.42, let's just open directory containing it
+                // Better: navigate to parent, select file.
+                // We need 'dirname' equivalent. Simple string split for now.
+                const parent = first.split(/[\\/]/).slice(0, -1).join(first.includes('\\') ? '\\' : '/') || '/';
+                setCurrentPath(parent);
+                guardedSetView('explorer');
+                toast.info(`Dropped: ${first.split(/[\\/]/).pop()}`);
+              }
+            }).catch(() => {});
+          }
+        });
+      });
+    }
+  }, [isTauri]);
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         if (view === 'editor' && activeFile) {

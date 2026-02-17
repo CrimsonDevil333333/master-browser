@@ -54,6 +54,7 @@ No mock data paths are used for core actions — operations are wired to real ba
   - create folder
 - Right-click context menu (Explorer):
   - Open, Rename, Copy, Move, Delete, New File, New Folder, Paste.
+- **Drag & Drop**: Drop files or folders onto the window to instantly navigate to them.
 
 ### 2) Integrated Editor
 - Monaco-based editor with syntax support for common source/text formats.
@@ -95,7 +96,7 @@ No mock data paths are used for core actions — operations are wired to real ba
 
 ## 🛠 Tech Stack
 
-- **Backend:** Rust, Tauri, sysinfo, walkdir, zip, image, regex
+- **Backend:** Rust, Tauri, sysinfo, walkdir, zip, image, regex, ext4_rs (userspace fs)
 - **Frontend:** Next.js, React, Tailwind CSS, Framer Motion, Monaco Editor
 
 ---

@@ -116,6 +116,11 @@ fn list_disks() -> Vec<DiskInfo> {
     get_disks_internal()
 }
 
+#[tauri::command]
+fn is_dir(path: String) -> bool {
+    fs::metadata(path).map(|m| m.is_dir()).unwrap_or(false)
+}
+
 fn get_permissions_string(meta: &fs::Metadata) -> String {
     #[cfg(unix)]
     {
@@ -826,6 +831,7 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             list_disks,
+            is_dir,
             list_directory,
             read_file_content,
             write_file_content,
